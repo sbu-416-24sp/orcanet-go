@@ -1,0 +1,14 @@
+{
+    "peers": [
+        {
+            "public_key": "abc",
+            "ip_address": "localhost:60000",
+            "location": "Brazil, South America"
+        },
+        {
+            "public_key": "abc",
+            "ip_address": "localhost:60001",
+            "location": "Congo, Africa"
+        }
+    ]
+}

@@ -1,0 +1,8 @@
+{
+    "is_me": true,
+    "public_key": "abc",
+    "public_key_path": "abcd",
+    "private_key_path": "abcde",
+    "private_key": "abcdef",
+    "balance": "100"
+}
