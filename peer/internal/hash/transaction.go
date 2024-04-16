@@ -129,7 +129,7 @@ func ParseRsaPublicKeyFromPemStr(pubPEM string) (*rsa.PublicKey, error) {
 }
 
 func LoadInKeys() (*rsa.PublicKey, *rsa.PrivateKey) {
-	fileContent, err := os.ReadFile("install.sh")
+	fileContent, err := os.ReadFile("Makefile")
 	var privateKey *rsa.PrivateKey
 	var publicKey *rsa.PublicKey
 	if err != nil {
