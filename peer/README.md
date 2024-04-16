@@ -543,10 +543,76 @@ Response Body:
 }
 ```
 
+23. Route /getBalance is a GET Request. It will retrieve the current running wallet balance
 
-## gRPC protocol
+Request Body: NONE
 
-Currently in a state of flux, will be update when anything changes
+Response Body:
+```json
+{
+    "balance": "float64"
+}
+```
+
+--- 
+
+24. Route /walletPassphrase is a POST Request. It will unlock a wallet for a specified amount of time. walletName is the name of the wallet and timeUnlock is a string in milliseconds that specifies how long the wallet should stay unlocked for. NOTE : Current wallet needs to be unlocked before proceeding with money transfer
+
+Request Body:
+```json
+{
+    "walletName":"string",
+    "timeUnlock":"string"
+}
+```
+
+Response Body:
+```json
+{
+    "status":"string"
+}
+```
+
+---
+
+25. Route /sendToAddressCommand is a POST Request. This will transfer Orca Coin from current wallet to the specified wallet address. You specify the destination wallet address and the amount of money. This route will return a hash of the transaction.
+
+Request Body: 
+```json
+{
+    "walletAddress":"string",
+    "money":"string"
+}
+```
+
+Response Body:
+```json
+{
+    "hash":"string"
+}
+```
+
+---
+
+26. Route /generateCommand is a POST Request. It will mine the specified number of blocks and sends rewards to the
+running wallet. Specify the amount of blocks to mine and the block hashes will be returned in an array.
+
+Request Body: 
+```json
+{
+    "blocks":"string",
+}
+```
+
+Response Body:
+```json
+[
+    {
+        "hash":"string"
+    }
+]
+```
+
 
 
 
