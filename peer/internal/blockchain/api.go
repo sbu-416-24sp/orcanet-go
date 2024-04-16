@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/user"
 	"strings"
 )
 
@@ -19,19 +18,22 @@ const (
 	walletPassphraseCommand = "walletpassphrase"
 )
 
+var filepath string
+
 func StartBitcoinNode() {
 	filepath, err := getConfFilePath()
 	if err != nil {
 		fmt.Println("Error when computing conf path", err)
 		return
 	}
-	fmt.Println("Current path to bitcoin config file" + filepath)
-	exec.Command("btcd", "--freshnet")
+	filepath = filepath + ""
+	cmd := exec.Command("../coin/btcd", "--freshnet")
+	cmd.Run()
 	// args := []string{getBalanceCommand}
 	// apiCall(args)
 }
 
-func apiCall(confPath string, args []string) {
+func ApiCall(confPath string, args []string) {
 	argsLen := len(args)
 	if argsLen == 0 {
 		fmt.Println("No commands were provided")
@@ -65,7 +67,7 @@ func apiCall(confPath string, args []string) {
 
 // executeCommand executes the given command with the provided arguments
 func executeCommand(confPath string, command string, args ...string) error {
-	cmd := exec.Command("btcctl", append([]string{"--configfile=" + confPath, command}, args...)...)
+	cmd := exec.Command("../coin/btcctl", append([]string{"--configfile=" + confPath, command}, args...)...)
 	cmd.Args = append(cmd.Args, "--notls")
 	output, err := cmd.Output()
 	if err != nil {
@@ -77,10 +79,10 @@ func executeCommand(confPath string, command string, args ...string) error {
 
 // Retrieves the user's filepath for sample-btcctl.conf
 func getConfFilePath() (string, error) {
-	currentUser, err := user.Current()
-	if err != nil {
-		return "", err
-	}
+	// currentUser, err := user.Current()
+	// if err != nil {
+	// 	return "", err
+	// }
 
 	// Get the value of the $GOPATH environment variable
 	goPath := os.Getenv("GOPATH")
@@ -91,8 +93,13 @@ func getConfFilePath() (string, error) {
 	// Replace backslashes with forward slashes (if running on Windows)
 	goPath = strings.ReplaceAll(goPath, "\\", "/")
 
+	currentDir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error:", err)
+	}
+
 	// Construct the file path with the username and $GOPATH
-	filePath := fmt.Sprintf("%s/orcacoin-go/cmd/btcctl/sample-btcctl.conf", currentUser.HomeDir)
+	filePath := fmt.Sprintf("%s/../coin/cmd/btcctl/sample-btcctl.conf", currentDir)
 
 	return filePath, nil
 }

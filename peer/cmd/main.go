@@ -15,6 +15,6 @@ func main() {
 	flag.Parse()
 	publicKey, privateKey := orcaHash.LoadInKeys()
 	os.MkdirAll("./files/stored/", 0755)
-	orcaBlockchain.StartBitcoinNode()
+	go orcaBlockchain.StartBitcoinNode()
 	orcaCLI.StartCLI(&boostrapNodeAddress, publicKey, privateKey)
 }

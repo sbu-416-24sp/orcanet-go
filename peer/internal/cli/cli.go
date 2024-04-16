@@ -27,6 +27,12 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	rpcPort := getPort("Market RPC Server")
 	dhtPort := getPort("Market DHT Host")
 	httpPort := getPort("HTTP Server")
+	for httpPort == "" || rpcPort == "" || dhtPort == "" {
+		fmt.Println("All three ports must be given, please try again.")
+		rpcPort = getPort("Market RPC Server")
+		dhtPort = getPort("Market DHT Host")
+		httpPort = getPort("HTTP Server")
+	}
 	serverReady := make(chan bool)
 	confirming := false
 	confirmation := ""
