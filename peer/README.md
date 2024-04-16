@@ -69,46 +69,24 @@ $ make all
 
 ## CLI interface
 
-Requesting a file:
-
-```bash
-$ get [ip] [port] [filename]
-```
-
-Storing a file:
-
-```bash
-$ store [ip] [address] [filename]
-```
-
-Putting a key inside DHT
+Get a file from the DHT.
 
 ```bash
 
-$ putKey [key] [value]
+$ get [fileHash] 
 
 ```
 
-Getting a key inside DHT
+Storing a file in the DHT for a given price.
 
 ```bash
-
-$ getKey [key]
-
+$ store [fileHash] [amount]
 ```
 
-Import a file:
+Import a file into the files directory:
 
 ```bash
 $ import [filepath]
-```
-
-Complete pipeline for getting a file from DHT:
-
-```bash
-
-$ fileGet [fileHash] 
-
 ```
 
 Send a certain amount of coin to an address

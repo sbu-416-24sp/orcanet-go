@@ -3,16 +3,23 @@ package cli
 import (
 	"bufio"
 	"crypto/rsa"
+	"encoding/json"
 	"fmt"
 	"net"
 	orcaClient "orca-peer/internal/client"
+	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
+	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
 	"strconv"
 	"strings"
+)
+
+var (
+	ip string
 )
 
 func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey) {
@@ -23,6 +30,14 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	serverReady := make(chan bool)
 	confirming := false
 	confirmation := ""
+	locationJsonString := orcaStatus.GetLocationData()
+	var locationJson map[string]interface{}
+	err := json.Unmarshal([]byte(locationJsonString), &locationJson)
+	if err != nil {
+		fmt.Println("Unable to establish user IP, please try again")
+		return
+	}
+	ip = locationJson["ip"].(string)
 	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey)
 	<-serverReady
 	fmt.Println("Welcome to Orcanet!")
@@ -60,50 +75,50 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 
 		switch command {
 		case "get":
-			if len(args) == 3 {
-				go client.GetFileOnce(args[0], args[1], args[2])
+			if len(args) == 1 {
+				holders, err := server.SetupCheckHolders(args[0])
+				if err != nil {
+					fmt.Printf("Error finding holders for file: %x", err)
+					continue
+				}
+				var bestHolder *fileshare.User
+				bestHolder = nil
+				for _, holder := range holders.Holders {
+					if bestHolder == nil {
+						bestHolder = holder
+					} else if bestHolder.Price < holder.Price {
+						bestHolder = holder
+					}
+				}
+				if bestHolder == nil {
+					fmt.Println("Unable to find holder for this hash.")
+					continue
+				}
+				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
 			} else {
-				fmt.Println("Usage: get [ip] [port] [filename]")
+				fmt.Println("Usage: get [fileHash]")
 				fmt.Println()
 			}
-		// case "fileGet":
-		// 	if len(args) == 1 {
-		// 		go func() {
-		// 			addresses := orcaServer.SearchKey(ctx, dht, args[0])
-		// 			for _, address := range addresses {
-		// 				addressParts := strings.Split(address, ":")
-		// 				if len(addressParts) == 2 {
-		// 					client.GetFileOnce(addressParts[0], addressParts[1], args[0])
-		// 				} else {
-		// 					fmt.Println("Error, got invalid address from DHT")
-		// 				}
-		// 			}
-		// 		}()
-		// 	} else {
-		// 		fmt.Println("Usage: fileGet [file hash]")
-		// 		fmt.Println()
-		// 	}
-		// case "fileStore":
-		// 	if len(args) == 1 {
-		// 		go func() {
-		// 			fileHash, err := orcaHash.HashFile(args[0])
-		// 			if err != nil {
-		// 				fmt.Println(err)
-		// 				return
-		// 			}
-		// 			fileHashStr := string(fileHash)
-		// 			address := "localhost" + ":" + port
-		// 			orcaServer.PlaceKey(ctx, dht, fileHashStr, address)
-		// 		}()
-		// 	} else {
-		// 		fmt.Println("Usage: fileStore [file path]")
-		// 		fmt.Println()
-		// 	}
 		case "store":
-			if len(args) == 3 {
-				go client.RequestStorage(args[0], args[1], args[2])
+			if len(args) == 2 {
+				costPerMB, err := strconv.ParseInt(args[1], 10, 64)
+				if err != nil {
+					fmt.Println("Error parsing in cost per MB: must be a int64", err)
+					continue
+				}
+				port, err := strconv.ParseInt(httpPort, 10, 64)
+				if err != nil {
+					fmt.Println("Error parsing in port: must be a integer.", err)
+					continue
+				}
+				err = server.SetupRegisterFile(args[0], costPerMB, ip, int32(port))
+				if err != nil {
+					fmt.Printf("Unable to register file on DHT: %x", err)
+				} else {
+					fmt.Println("Sucessfully registered file on DHT.")
+				}
 			} else {
-				fmt.Println("Usage: store [ip] [port] [filename]")
+				fmt.Println("Usage: store [fileHash] [amount]")
 				fmt.Println()
 			}
 		case "import":
@@ -169,12 +184,11 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			}
 		case "help":
 			fmt.Println("COMMANDS:")
-			fmt.Println(" get [ip] [port] [filename]     Request a file")
-			fmt.Println(" store [ip] [port] [filename]   Request storage of a file")
+			fmt.Println(" get [fileHash]                 Request a file from DHT")
+			fmt.Println(" store [fileHash] [amount]      Store a file on DHT")
 			fmt.Println(" getdir [ip] [port] [path]      Request a directory")
 			fmt.Println(" storedir [ip] [port] [path]    Request storage of a directory")
 			fmt.Println(" import [filepath]              Import a file")
-			fmt.Println(" fileGet [fileHash]             Get the file from the network")
 			fmt.Println(" send [amount] [ip]             Send an amount of money to network")
 			fmt.Println(" hash [fileName]                Get the hash of a file")
 			fmt.Println(" list                           List all files you are storing")

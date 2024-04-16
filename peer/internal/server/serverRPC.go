@@ -4,24 +4,25 @@
  *		https://ldej.nl/post/building-an-echo-application-with-libp2p/
  *		https://github.com/libp2p/go-libp2p/blob/master/examples/chat-with-rendezvous/chat.go
  *		https://github.com/libp2p/go-libp2p/blob/master/examples/pubsub/basic-chat-with-rendezvous/main.go
-*/
+ */
 
 package server
 
 import (
 	"bufio"
 	"context"
-	"net"
-	"google.golang.org/grpc"
 	"crypto/rsa"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"orca-peer/internal/fileshare"
 	"os"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
 
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -42,11 +43,15 @@ type fileShareServerNode struct {
 	mu           sync.Mutex                       // protects routeNotes
 	currentCoins float64
 
-	K_DHT *dht.IpfsDHT
+	K_DHT   *dht.IpfsDHT
 	PrivKey libp2pcrypto.PrivKey
-	PubKey libp2pcrypto.PubKey
-	V record.Validator
+	PubKey  libp2pcrypto.PubKey
+	V       record.Validator
 }
+
+var (
+	serverStruct fileShareServerNode
+)
 
 func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool) {
 	ctx := context.Background()
@@ -57,7 +62,7 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 		panic("Could not generate libp2p wrapped key from standard private key.")
 	}
 
-	pubKey := privKey.GetPublic();
+	pubKey := privKey.GetPublic()
 
 	//Construct multiaddr from string and create host to listen on it
 	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", dhtPort))
@@ -65,7 +70,7 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 		libp2p.ListenAddrStrings(sourceMultiAddr.String()),
 		libp2p.Identity(privKey), //derive id from private key
 	}
-	
+
 	host, err := libp2p.New(opts...)
 	if err != nil {
 		panic(err)
@@ -79,7 +84,7 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 
 	bootstrapPeers := ReadBootstrapPeers()
 
-	// Start a DHT, for now we will start in client mode until we can implement a way to 
+	// Start a DHT, for now we will start in client mode until we can implement a way to
 	// detect if we are behind a NAT or not to run in server mode.
 	var validator record.Validator = OrcaValidator{}
 	var options []dht.Option
@@ -122,22 +127,22 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	}
 
 	s := grpc.NewServer()
-	serverStruct := fileShareServerNode{}
-	serverStruct.K_DHT = kDHT;
-	serverStruct.PrivKey = privKey;
-	serverStruct.PubKey = pubKey;
+	serverStruct = fileShareServerNode{}
+	serverStruct.K_DHT = kDHT
+	serverStruct.PrivKey = privKey
+	serverStruct.PubKey = pubKey
 	serverStruct.V = validator
 	fileshare.RegisterFileShareServer(s, &serverStruct)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 	serverReady <- true
 	if err := s.Serve(lis); err != nil {
-		panic(err);
+		panic(err)
 	}
 }
 
 /*
- * Check for peers who have announced themselves on the DHT. 
- * If the DHT is running in server mode, then we will announce ourselves and check for 
+ * Check for peers who have announced themselves on the DHT.
+ * If the DHT is running in server mode, then we will announce ourselves and check for
  * others who have announced as well.
  *
  * Parameters:
@@ -148,10 +153,10 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
  * 				DHT is in server mode then that string will be used to announce ourselves as well.
  *
  */
- func DiscoverPeers(ctx context.Context, h host.Host, kDHT *dht.IpfsDHT, advertise string) {
-	routingDiscovery := drouting.NewRoutingDiscovery(kDHT);
-	if(kDHT.Mode() == dht.ModeServer){
-		dutil.Advertise(ctx, routingDiscovery, advertise);
+func DiscoverPeers(ctx context.Context, h host.Host, kDHT *dht.IpfsDHT, advertise string) {
+	routingDiscovery := drouting.NewRoutingDiscovery(kDHT)
+	if kDHT.Mode() == dht.ModeServer {
+		dutil.Advertise(ctx, routingDiscovery, advertise)
 	}
 
 	// Look for others who have announced and attempt to connect to them
@@ -271,9 +276,24 @@ func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash strin
 	}
 }
 
+func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32) error {
+	ctx := context.Background()
+	fileReq := fileshare.RegisterFileRequest{}
+	fileReq.User = &fileshare.User{}
+	fileReq.User.Price = amountPerMB
+	fileReq.User.Ip = ip
+	fileReq.User.Port = port
+	fileReq.FileHash = fileHash
+	_, err := serverStruct.RegisterFile(ctx, &fileReq)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 /*
  * gRPC service to register a file on the DHT market.
- * 
+ *
  * Parameters:
  *   ctx: Context
  *   in: A protobuf RegisterFileRequest struct that represents the file/producer being registered.
@@ -282,32 +302,32 @@ func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash strin
  *   An empty protobuf struct
  *   An error, if any
  */
- func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
+func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
 	hash := in.GetFileHash()
 	pubKeyBytes, err := s.PubKey.Raw()
-	if(err != nil){
+	if err != nil {
 		return nil, err
 	}
-	in.GetUser().Id = pubKeyBytes;
+	in.GetUser().Id = pubKeyBytes
 
-	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/" + hash);
-	if(err != nil){
+	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/"+hash)
+	if err != nil {
 		value = make([]byte, 0)
 	}
 
 	//remove record for id if it already exists
-	for i := 0; i < len(value) - 8; i++ {
-		messageLength := uint16(value[i + 1]) << 8 | uint16(value[i])
-		digitalSignatureLength := uint16(value[i + 3]) << 8 | uint16(value[i + 2])
+	for i := 0; i < len(value)-8; i++ {
+		messageLength := uint16(value[i+1])<<8 | uint16(value[i])
+		digitalSignatureLength := uint16(value[i+3])<<8 | uint16(value[i+2])
 		contentLength := messageLength + digitalSignatureLength
 		user := &fileshare.User{}
 
-		err := proto.Unmarshal(value[i + 4:i + 4 + int(messageLength)], user) //will parse bytes only until user struct is filled out
+		err := proto.Unmarshal(value[i+4:i+4+int(messageLength)], user) //will parse bytes only until user struct is filled out
 		if err != nil {
 			return nil, err
 		}
 
-		if(len(user.GetId()) == len(in.GetUser().GetId())){
+		if len(user.GetId()) == len(in.GetUser().GetId()) {
 			recordExists := true
 			for i := range in.GetUser().GetId() {
 				if user.GetId()[i] != in.GetUser().GetId()[i] {
@@ -316,56 +336,67 @@ func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash strin
 				}
 			}
 
-			if(recordExists){
-				value = append(value[:i], value[i + 4 + int(contentLength):]...);
-				break;
+			if recordExists {
+				value = append(value[:i], value[i+4+int(contentLength):]...)
+				break
 			}
 		}
 
-		i = i + 4 + int(contentLength) - 1;
+		i = i + 4 + int(contentLength) - 1
 	}
 
-	record := make([]byte, 0);
-	userProtoBytes, err := proto.Marshal(in.GetUser());
-	if(err != nil){
+	record := make([]byte, 0)
+	userProtoBytes, err := proto.Marshal(in.GetUser())
+	if err != nil {
 		return nil, err
 	}
-	userProtoSize := len(userProtoBytes);
-	signature, err := s.PrivKey.Sign(userProtoBytes);
-	if(err != nil){
+	userProtoSize := len(userProtoBytes)
+	signature, err := s.PrivKey.Sign(userProtoBytes)
+	if err != nil {
 		return nil, err
 	}
-	signatureLength := len(signature);
-	record = append(record, byte(userProtoSize));
-	record = append(record, byte(userProtoSize >> 8));
-	record = append(record, byte(signatureLength));
-	record = append(record, byte(signatureLength >> 8));
-	record = append(record, userProtoBytes...);
-	record = append(record, signature...);
+	signatureLength := len(signature)
+	record = append(record, byte(userProtoSize))
+	record = append(record, byte(userProtoSize>>8))
+	record = append(record, byte(signatureLength))
+	record = append(record, byte(signatureLength>>8))
+	record = append(record, userProtoBytes...)
+	record = append(record, signature...)
 
 	currentTime := time.Now().UTC()
-    unixTimestamp := currentTime.Unix()
-    unixTimestampInt64 := uint64(unixTimestamp)
+	unixTimestamp := currentTime.Unix()
+	unixTimestampInt64 := uint64(unixTimestamp)
 	for i := 7; i >= 0; i-- {
 		curByte := unixTimestampInt64 >> (i * 8)
 		record = append(record, byte(curByte))
 	}
 
-	if(len(value) != 0){
-		value = value[:len(value) - 8] //get rid of previous values timestamp
+	if len(value) != 0 {
+		value = value[:len(value)-8] //get rid of previous values timestamp
 	}
-	value = append(value, record...);
+	value = append(value, record...)
 
-	err = s.K_DHT.PutValue(ctx, "orcanet/market/" + in.GetFileHash(), value);
-	if(err != nil){
-		return nil, err;
+	err = s.K_DHT.PutValue(ctx, "orcanet/market/"+in.GetFileHash(), value)
+	if err != nil {
+		return nil, err
 	}
 	return &emptypb.Empty{}, nil
 }
 
+func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
+	ctx := context.Background()
+	fileReq := fileshare.CheckHoldersRequest{}
+	fileReq.FileHash = fileHash
+	holdersResponse, err := serverStruct.CheckHolders(ctx, &fileReq)
+	if err != nil {
+		return nil, err
+	}
+	return holdersResponse, nil
+}
+
 /*
  * gRPC service to check for producers who have registered a specific file.
- * 
+ *
  * Parameters:
  *   ctx: Context
  *   in: A protobuf CheckHoldersRequest struct that represents the file to look up.
@@ -377,23 +408,23 @@ func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash strin
 func (s *fileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.CheckHoldersRequest) (*fileshare.HoldersResponse, error) {
 	hash := in.GetFileHash()
 	users := make([]*fileshare.User, 0)
-	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/" + hash);
-	if(err != nil){
+	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/"+hash)
+	if err != nil {
 		return &fileshare.HoldersResponse{Holders: users}, nil
 	}
 
-	for i := 0; i < len(value) - 8; i++ {
-		messageLength := uint16(value[i + 1]) << 8 | uint16(value[i])
-		digitalSignatureLength := uint16(value[i + 3]) << 8 | uint16(value[i + 2])
+	for i := 0; i < len(value)-8; i++ {
+		messageLength := uint16(value[i+1])<<8 | uint16(value[i])
+		digitalSignatureLength := uint16(value[i+3])<<8 | uint16(value[i+2])
 		contentLength := messageLength + digitalSignatureLength
 		user := &fileshare.User{}
 
-		err := proto.Unmarshal(value[i + 4:i + 4 + int(messageLength)], user) //will parse bytes only until user struct is filled out
+		err := proto.Unmarshal(value[i+4:i+4+int(messageLength)], user) //will parse bytes only until user struct is filled out
 		if err != nil {
 			return nil, err
 		}
 
-		users = append(users, user);
+		users = append(users, user)
 		i = i + 4 + int(contentLength) - 1
 	}
 
