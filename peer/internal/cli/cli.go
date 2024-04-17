@@ -100,6 +100,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					fmt.Println("Unable to find holder for this hash.")
 					continue
 				}
+				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
 				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
 			} else {
 				fmt.Println("Usage: get [fileHash]")
