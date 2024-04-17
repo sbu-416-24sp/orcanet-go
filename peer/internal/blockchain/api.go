@@ -21,7 +21,6 @@ const (
 var filepath string
 
 func StartBitcoinNode() {
-	fmt.Println("EEES")
 	filepath, err := getConfFilePath()
 	if err != nil {
 		fmt.Println("Error when computing conf path", err)
