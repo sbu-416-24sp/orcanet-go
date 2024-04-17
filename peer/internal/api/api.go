@@ -3,7 +3,7 @@ package api
 import (
 	"crypto/rsa"
 	"crypto/sha256"
-//	"encoding/base64"
+
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -66,12 +66,12 @@ func getAllFiles(w http.ResponseWriter, r *http.Request) {
 
 }
 
+
 type FileInfo struct {
 	Filename     string `json:"filename"`
 	Filesize     int    `json:"filesize"`
 	Filehash     string `json:"filehash"`
 	Lastmodified string `json:"lastmodified"`
-	//Filecontent  string `json:"filecontent"`
 }
 
 func getFileInfo(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +80,7 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 
 		// Retrieve specific query parameters by key
 		filename := queryParams.Get("hash")
+
 		if st, err := os.Stat("files/" + filename); !os.IsNotExist(err) {
 			fileData, err := os.ReadFile("files/" + filename)
 			if err != nil {
@@ -88,7 +89,7 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			lenData := len(fileData)
-	//		base64Encode := base64.StdEncoding.EncodeToString(fileData)
+
 			hash := sha256.Sum256(fileData)
 
 			// Encode the hash as a hexadecimal string
@@ -99,7 +100,6 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 				Filesize:     lenData,
 				Filehash:     hexHash,
 				Lastmodified: st.ModTime().String(),
-		//		Filecontent:  base64Encode,
 			}
 			jsonData, err := json.Marshal(fileInfoResp)
 			if err != nil {
@@ -119,65 +119,6 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 		writeStatusUpdate(w, "Request must have the content header set as application/json")
 		return
 	}
-}
-
-func getAllRequested(w http.ResponseWriter,  r *http.Request) {
-
-	var fileInfoList []FileInfo
-
-	// Get a list of files in the directory
-	dirPath := "./files/requested/"
-    files, err := os.ReadDir(dirPath)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
-		writeStatusUpdate(w, "1 Failed to convert JSON Data into a string")
-		return
-    }
-
-    // Iterate over each file
-    for _, file := range files {
-        // Construct the file path
-		filePath := filepath.Join(dirPath, file.Name())
-
-		fileData, err := os.ReadFile(filePath)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			writeStatusUpdate(w, "Failed to read in file from given path")
-			return
-		}
-		st, err := os.Stat(filePath);
-		lenData := len(fileData)
-	//	base64Encode := base64.StdEncoding.EncodeToString(fileData)
-		hash := sha256.Sum256(fileData)
-
-		// Encode the hash as a hexadecimal string
-		hexHash := hex.EncodeToString(hash[:])
-
-		fileInfoResp := FileInfo{
-			Filename:     file.Name(),
-			Filesize:     lenData,
-			Filehash:     hexHash,
-			Lastmodified: st.ModTime().String(),
-		//	Filecontent:  base64Encode,
-		}
-		//jsonData, err := json.Marshal(fileInfoResp)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
-			return
-		}
-        // Append FileInfo to the list
-        fileInfoList = append(fileInfoList, fileInfoResp)
-    }
-	jsonData, err := json.Marshal(fileInfoList)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeStatusUpdate(w, "Failed to convert JSON Data into a string")
-		return
-	}
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.WriteHeader(http.StatusOK)
-	w.Write(jsonData)
 }
 
 func getAllStored(w http.ResponseWriter,  r *http.Request) {
@@ -238,6 +179,7 @@ func getAllStored(w http.ResponseWriter,  r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
 }
+
 
 func writeStatusUpdate(w http.ResponseWriter, message string) {
 	responseMsg := map[string]interface{}{
@@ -311,16 +253,11 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		writeStatusUpdate(w, "Successfully uploaded file from local computer into files directory")
 		w.Write(jsonResponse)
 		return
-		
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
-		return
-	}
+  }		
 }
-
 func deleteFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
+
 		contentType := r.Header.Get("Content-Type")
 		switch contentType {
 		case "application/json":
@@ -333,6 +270,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if payload.Filename == "" && payload.Hash == "" {
+
 				w.WriteHeader(http.StatusInternalServerError)
 				writeStatusUpdate(w, "Missing Filename and CID values inside of the payload.")
 				return
@@ -370,6 +308,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		writeStatusUpdate(w, "Only DELETE requests will be handled.")
+
 		return
 	}
 
@@ -706,11 +645,11 @@ func InitServer() {
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()
 	http.HandleFunc("/get-file", getFile)
-	http.HandleFunc("/getAllRequested", getAllRequested)
 	http.HandleFunc("/getAllStored", getAllStored)
 	http.HandleFunc("/get-file-info", getFileInfo)
 	http.HandleFunc("/upload-file", uploadFile)
 	http.HandleFunc("/delete-file", deleteFile)
+
 	http.HandleFunc("/updateActivityName", updateActivityName)
 	http.HandleFunc("/removeActivity", removeActivity)
 	http.HandleFunc("/setActivity", setActivity)
@@ -723,4 +662,6 @@ func InitServer() {
 	http.HandleFunc("/addPeer", addPeer)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
+
+
 }
