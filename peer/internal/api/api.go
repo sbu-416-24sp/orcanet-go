@@ -613,4 +613,10 @@ func InitServer() {
 	http.HandleFunc("/addPeer", addPeer)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
+	http.HandleFunc("/hash", hashFile)
+	http.HandleFunc("/getBalance", getBalance)
+	http.HandleFunc("/generateCommand", generateCommand)
+	http.HandleFunc("/sendToAddress", sendToAddress)
+	http.HandleFunc("/walletPassphrase", walletPassphrase)
+
 }
