@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"path/filepath"
 	"time"
-	"crypto/rsa"
 )
 
 const keyServerAddr = "serverAddr"
@@ -131,7 +131,6 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/sendTransaction", handleTransaction)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
 
 	http.ListenAndServe(":"+httpPort, nil)
@@ -143,7 +142,7 @@ func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confi
 
 	// Ask for confirmation
 	*confirming = true
-	fmt.Printf("\nYou have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
+	fmt.Printf("You have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
 
 	// Check if confirmation is received
 	for *confirmation != "yes" {
