@@ -1,0 +1,17 @@
+*
+!*.go
+!go.mod
+!README.md
+!.gitignore
+!go.sum
+!fileshare
+!file_hash/
+!util/
+!rsrc/
+!Makefile
+!bin/
+!cmd/
+!config/
+!internal/
+!files/
+!test/
