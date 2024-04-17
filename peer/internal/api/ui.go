@@ -3,7 +3,7 @@ package api
 import (
 	"crypto/rsa"
 	"crypto/sha256"
-	"encoding/base64"
+//	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -16,11 +16,12 @@ import (
 
 type GetFileJSONBody struct {
 	Filename string `json:"filename"`
-	CID      string `json:"cid"`
+	Hash      string `json:"hash"`
 }
 
 type UploadFileJSONBody struct {
 	Filepath string `json:"filepath"`
+	fileData http.File
 }
 
 var backend *Backend
@@ -29,51 +30,40 @@ var publicKey *rsa.PublicKey
 var privateKey *rsa.PrivateKey
 
 func getFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			// For JSON content type, decode the JSON into a struct
-			var payload GetFileJSONBody
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			if payload.Filename == "" && payload.CID == "" {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Missing CID and Filename field in request")
-				return
-			}
-			fileaddress := ""
+	// Parse query parameters
+	queryParams := r.URL.Query()
+	hash := queryParams.Get("hash")
 
-			if _, err := os.Stat("files/stored/" + payload.Filename); !os.IsNotExist(err) {
-				fileaddress = "files/stored/" + payload.Filename
-			}
-			if _, err := os.Stat("files/requested/" + payload.Filename); !os.IsNotExist(err) && fileaddress == "" {
-				fileaddress = "files/requested/" + payload.Filename
-			}
-			if _, err := os.Stat("files/" + payload.Filename); !os.IsNotExist(err) && fileaddress == "" {
-				fileaddress = "files/" + payload.Filename
-			}
-			if fileaddress != "" {
-
-			} else {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Cannot find specified file inside files directory")
-				return
-			}
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
+	// Check if the "hash" parameter is present
+	if hash == "" {
+		http.Error(w, "Missing 'hash' parameter", http.StatusBadRequest)
 		return
 	}
+	fmt.Println("hash:",hash)
+	fileaddress := ""
+
+	if _, err := os.Stat("files/stored/" + hash); !os.IsNotExist(err) {
+		fileaddress = "files/stored/" + hash
+	}
+	if _, err := os.Stat("files/requested/" + hash); !os.IsNotExist(err) && fileaddress == "" {
+		fileaddress = "files/requested/" + hash
+	}
+	if _, err := os.Stat("files/" + hash); !os.IsNotExist(err) && fileaddress == "" {
+		fileaddress = "files/" + hash
+	}
+	if fileaddress != "" {
+		fmt.Println("File address:",fileaddress)
+		http.ServeFile(w, r, fileaddress)
+
+	} else {
+		w.WriteHeader(http.StatusInternalServerError)
+		writeStatusUpdate(w, "Cannot find specified file inside files directory")
+		return
+	}
+}
+func getAllFiles(w http.ResponseWriter, r *http.Request) {
+
+
 }
 
 type FileInfo struct {
@@ -81,7 +71,7 @@ type FileInfo struct {
 	Filesize     int    `json:"filesize"`
 	Filehash     string `json:"filehash"`
 	Lastmodified string `json:"lastmodified"`
-	Filecontent  string `json:"filecontent"`
+	//Filecontent  string `json:"filecontent"`
 }
 
 func getFileInfo(w http.ResponseWriter, r *http.Request) {
@@ -89,7 +79,7 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 		queryParams := r.URL.Query()
 
 		// Retrieve specific query parameters by key
-		filename := queryParams.Get("filename")
+		filename := queryParams.Get("hash")
 		if st, err := os.Stat("files/" + filename); !os.IsNotExist(err) {
 			fileData, err := os.ReadFile("files/" + filename)
 			if err != nil {
@@ -98,7 +88,7 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			lenData := len(fileData)
-			base64Encode := base64.StdEncoding.EncodeToString(fileData)
+	//		base64Encode := base64.StdEncoding.EncodeToString(fileData)
 			hash := sha256.Sum256(fileData)
 
 			// Encode the hash as a hexadecimal string
@@ -109,7 +99,7 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 				Filesize:     lenData,
 				Filehash:     hexHash,
 				Lastmodified: st.ModTime().String(),
-				Filecontent:  base64Encode,
+		//		Filecontent:  base64Encode,
 			}
 			jsonData, err := json.Marshal(fileInfoResp)
 			if err != nil {
@@ -130,6 +120,125 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+func getAllRequested(w http.ResponseWriter,  r *http.Request) {
+
+	var fileInfoList []FileInfo
+
+	// Get a list of files in the directory
+	dirPath := "./files/requested/"
+    files, err := os.ReadDir(dirPath)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+		writeStatusUpdate(w, "1 Failed to convert JSON Data into a string")
+		return
+    }
+
+    // Iterate over each file
+    for _, file := range files {
+        // Construct the file path
+		filePath := filepath.Join(dirPath, file.Name())
+
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to read in file from given path")
+			return
+		}
+		st, err := os.Stat(filePath);
+		lenData := len(fileData)
+	//	base64Encode := base64.StdEncoding.EncodeToString(fileData)
+		hash := sha256.Sum256(fileData)
+
+		// Encode the hash as a hexadecimal string
+		hexHash := hex.EncodeToString(hash[:])
+
+		fileInfoResp := FileInfo{
+			Filename:     file.Name(),
+			Filesize:     lenData,
+			Filehash:     hexHash,
+			Lastmodified: st.ModTime().String(),
+		//	Filecontent:  base64Encode,
+		}
+		//jsonData, err := json.Marshal(fileInfoResp)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+        // Append FileInfo to the list
+        fileInfoList = append(fileInfoList, fileInfoResp)
+    }
+	jsonData, err := json.Marshal(fileInfoList)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
+func getAllStored(w http.ResponseWriter,  r *http.Request) {
+
+	var fileInfoList []FileInfo
+
+	// Get a list of files in the directory
+	dirPath := "./files/stored/"
+    files, err := os.ReadDir(dirPath)
+    if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+		writeStatusUpdate(w, "1 Failed to convert JSON Data into a string")
+		return
+    }
+
+    // Iterate over each file
+    for _, file := range files {
+        // Construct the file path
+		filePath := filepath.Join(dirPath, file.Name())
+
+		fileData, err := os.ReadFile(filePath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to read in file from given path")
+			return
+		}
+		st, err := os.Stat(filePath);
+		lenData := len(fileData)
+	//	base64Encode := base64.StdEncoding.EncodeToString(fileData)
+		hash := sha256.Sum256(fileData)
+
+		// Encode the hash as a hexadecimal string
+		hexHash := hex.EncodeToString(hash[:])
+
+		fileInfoResp := FileInfo{
+			Filename:     file.Name(),
+			Filesize:     lenData,
+			Filehash:     hexHash,
+			Lastmodified: st.ModTime().String(),
+	//		Filecontent:  base64Encode,
+		}
+		//jsonData, err := json.Marshal(fileInfoResp)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+        // Append FileInfo to the list
+        fileInfoList = append(fileInfoList, fileInfoResp)
+    }
+	jsonData, err := json.Marshal(fileInfoList)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonData)
+}
+
 func writeStatusUpdate(w http.ResponseWriter, message string) {
 	responseMsg := map[string]interface{}{
 		"status": message,
@@ -143,67 +252,66 @@ func writeStatusUpdate(w http.ResponseWriter, message string) {
 	w.Write(responseMsgJsonString)
 }
 
+type HashResponse struct {
+	Hash string `json:"hash"`
+}
+
 func uploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload UploadFileJSONBody
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			fileData, err := os.ReadFile(payload.Filepath)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Error reading in file from the Filepath specified.")
-				return
-			}
-			if _, err := os.Stat(payload.Filepath); !os.IsNotExist(err) {
-				sourceFile, err := os.Open(payload.Filepath)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					writeStatusUpdate(w, "Error getting information about file from file system.")
-					return
-				}
-				defer sourceFile.Close()
-				hash := sha256.Sum256(fileData)
-
-				// Encode the hash as a hexadecimal string
-				hexHash := hex.EncodeToString(hash[:])
-
-				// Create the destination file in the destination folder
-				destinationFilePath := "files/" + hexHash
-				destinationFile, err := os.Create(destinationFilePath)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					writeStatusUpdate(w, "Cannot create the file to store base64 data.")
-					return
-				}
-				defer destinationFile.Close()
-
-				_, err = io.Copy(destinationFile, sourceFile)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					writeStatusUpdate(w, "Unable to copy base64 data.")
-					return
-				}
-				w.WriteHeader(http.StatusOK)
-				writeStatusUpdate(w, "Successfully uploaded file from local computer into files directory")
-				return
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "File specified does not exist.")
-				return
-			}
-
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Successfully uploaded file from local computer into files directory")
+		// fileData := payload.fileData
+		// sourceFile, err := os.Open(payload.Filepath)
+		// Get the file from the form data
+		sourceFile, handler, err := r.FormFile("file")
+		if err != nil {
+			http.Error(w, "Unable to get file from form", http.StatusBadRequest)
 			return
 		}
+		fileContent, err := io.ReadAll(sourceFile)
+		if err != nil {
+			http.Error(w, "Unable to read file", http.StatusInternalServerError)
+			return
+		}
+		defer sourceFile.Close()
+		hash := sha256.Sum256(fileContent)
+
+		// Encode the hash as a hexadecimal string
+		hexHash := hex.EncodeToString(hash[:])
+
+		// Create the destination file in the destination folder
+		destinationFilePath := "files/" + hexHash
+		destinationFile, err := os.Create(destinationFilePath)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Cannot create the file to store base64 data.")
+			return
+		}
+		defer destinationFile.Close()
+
+		// Reset the read cursor back to the beginning of the file
+		_, err = sourceFile.Seek(0, 0)
+		if err != nil {
+			http.Error(w, "Unable to reset file read cursor", http.StatusInternalServerError)
+			return
+		}
+
+		_, err = io.Copy(destinationFile, sourceFile)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Unable to copy base64 data.")
+			return
+		}
+		fmt.Fprintf(w, "File %s uploaded successfully\n", handler.Filename)
+		// Create a JSON response containing the hash
+		response := HashResponse{Hash: hexHash}
+		jsonResponse, err := json.Marshal(response)
+		if err != nil {
+			http.Error(w, "Unable to marshal JSON", http.StatusInternalServerError)
+			return
+		}
+		writeStatusUpdate(w, "Successfully uploaded file from local computer into files directory")
+		w.Write(jsonResponse)
+		return
+		
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		writeStatusUpdate(w, "Only POST requests will be handled.")
@@ -212,7 +320,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func deleteFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
+	if r.Method == http.MethodDelete {
 		contentType := r.Header.Get("Content-Type")
 		switch contentType {
 		case "application/json":
@@ -224,25 +332,25 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
 				return
 			}
-			if payload.Filename == "" && payload.CID == "" {
+			if payload.Filename == "" && payload.Hash == "" {
 				w.WriteHeader(http.StatusInternalServerError)
 				writeStatusUpdate(w, "Missing Filename and CID values inside of the payload.")
 				return
 			}
-			fileDir := "./files"
-			var filePath string
+			fileDir := "./files/"
+			filePath := "./files/"+payload.Hash
 
 			// Check if the file exists in the "stored" directory
-			storedFilePath := filepath.Join(fileDir, "stored", payload.Filename)
+			storedFilePath := filepath.Join(fileDir, "stored", payload.Hash)
 			if _, err := os.Stat(storedFilePath); err == nil {
-				filePath = storedFilePath
+		//		filePath = storedFilePath
 			}
 			// Check if the file exists in the "requested" directory
-			requestedFilePath := filepath.Join(fileDir, "requested", payload.Filename)
+			requestedFilePath := filepath.Join(fileDir, "requested", payload.Hash)
 			if _, err := os.Stat(requestedFilePath); err == nil {
 				filePath = requestedFilePath
 			}
-
+			fmt.Println("filePath: ",filePath)
 			// Attempt to delete the file
 			err := os.Remove(filePath)
 			if err != nil {
@@ -261,7 +369,7 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
+		writeStatusUpdate(w, "Only DELETE requests will be handled.")
 		return
 	}
 
@@ -597,10 +705,12 @@ func InitServer() {
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()
-	http.HandleFunc("/getFile", getFile)
-	http.HandleFunc("/getFileInfo", getFileInfo)
-	http.HandleFunc("/uploadFile", uploadFile)
-	http.HandleFunc("/deleteFile", deleteFile)
+	http.HandleFunc("/get-file", getFile)
+	http.HandleFunc("/getAllRequested", getAllRequested)
+	http.HandleFunc("/getAllStored", getAllStored)
+	http.HandleFunc("/get-file-info", getFileInfo)
+	http.HandleFunc("/upload-file", uploadFile)
+	http.HandleFunc("/delete-file", deleteFile)
 	http.HandleFunc("/updateActivityName", updateActivityName)
 	http.HandleFunc("/removeActivity", removeActivity)
 	http.HandleFunc("/setActivity", setActivity)
