@@ -59,6 +59,16 @@ $ protoc --go_out=./internal/fileshare \
     file_share.proto
 ```
 
+Second, make sure you create the executable for the bitcoin nodes. It can be done from the root directory as follows:
+
+```bash
+
+$ cd coin
+
+$ make
+
+```
+
 GO Version: 1.21.4
 
 ```bash
