@@ -618,5 +618,4 @@ func InitServer() {
 	http.HandleFunc("/generateCommand", generateCommand)
 	http.HandleFunc("/sendToAddress", sendToAddress)
 	http.HandleFunc("/walletPassphrase", walletPassphrase)
-
 }

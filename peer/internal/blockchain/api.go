@@ -21,14 +21,26 @@ const (
 var filepath string
 
 func StartBitcoinNode() {
+	fmt.Println("EEES")
 	filepath, err := getConfFilePath()
 	if err != nil {
 		fmt.Println("Error when computing conf path", err)
 		return
 	}
 	filepath = filepath + ""
-	cmd := exec.Command("../coin/btcd", "--freshnet")
-	cmd.Run()
+	c, b := exec.Command("../coin/btcd", "--freshnet"), new(strings.Builder)
+	c.Stdout = b
+	c.Run()
+	print(b.String())
+	out, err := exec.Command("../coin/btcd", "--freshnet").Output()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+	lines := strings.Split(string(out), "\n")
+	for _, line := range lines {
+		fmt.Println(line)
+	}
 	// args := []string{getBalanceCommand}
 	// apiCall(args)
 }
@@ -79,20 +91,6 @@ func executeCommand(confPath string, command string, args ...string) error {
 
 // Retrieves the user's filepath for sample-btcctl.conf
 func getConfFilePath() (string, error) {
-	// currentUser, err := user.Current()
-	// if err != nil {
-	// 	return "", err
-	// }
-
-	// Get the value of the $GOPATH environment variable
-	goPath := os.Getenv("GOPATH")
-	if goPath == "" {
-		return "", fmt.Errorf("$GOPATH is not set")
-	}
-
-	// Replace backslashes with forward slashes (if running on Windows)
-	goPath = strings.ReplaceAll(goPath, "\\", "/")
-
 	currentDir, err := os.Getwd()
 	if err != nil {
 		fmt.Println("Error:", err)
