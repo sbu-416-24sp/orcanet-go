@@ -7,21 +7,11 @@ package fileshare;
 
 // Client --> Server
 service FileShare{
-    // Producer/Consumer --> Blockchain
-    rpc RecordFileRequestTransaction(FileRequestTransaction) returns (TransactionACKResponse);
     // Consumer --> Market
     // register a file on the market
     rpc RegisterFile (RegisterFileRequest) returns (google.protobuf.Empty) {}
-
-    // check for holders of a file. returns a list of users
+    // Check for holders of a file. returns a list of users
     rpc CheckHolders (CheckHoldersRequest) returns (HoldersResponse) {}
-    // Consumer --> Market
-    rpc RequestAllAvailableFileNames (StorageIP) returns (stream FileDesc);
-    // Producer --> Market
-    rpc NotifyFileStore(FileDesc) returns (StorageACKResponse);
-    // Market --> Producer ?? Maybe Market --> Consumer instead
-    rpc NotifyFileUnstore(FileDesc) returns (StorageACKResponse);
-    // Consumer --> Producer
     rpc SendFile(FileDesc) returns (FileDesc);
 }
 message User {
@@ -59,44 +49,6 @@ message FileInfo {
   string fileName = 4;
 }
 
-message FileRequestTransaction{
-    int64 file_byte_size = 1;
-    string file_hash_name = 2;
-    float currency_exchanged = 3;
-    string sender_id = 4;
-    string receiver_id = 5;
-    string file_ip_location = 6;
-    int64 seconds_timeout = 7;
-}
-
-message FileLocation{
-    int64 file_byte_size = 1;
-    string file_hash_name = 2;
-    float cost = 3;
-    string address = 4;
-}
-
-message TransactionACKResponse{
-    bool is_success = 1;
-    string block_hash = 2;
-    double timestamp = 3;
-    string market_id = 4;
-}
-
-message StorageACKResponse {
-    bool is_acknowledged = 1;
-    string file_name = 2;
-    string file_hash = 3;
-    int64 file_byte_size = 4;
-
-}
-message StorageResponse{
-    bool agree_to_store = 1;
-    string storer_id = 2;
-    int64 file_bytes_size = 3;
-    string file_name = 4;
-}
-
 message FileDesc{
     string file_name_hash = 1;
     string file_name = 2;
@@ -106,14 +58,4 @@ message FileDesc{
     float file_cost = 6;
     string file_data_hash = 7;
     bytes file_bytes = 8;
-}
-
-message StorageIP{
-    bool success = 1;
-    string address = 2;
-    string user_id = 3;
-    string file_name = 4;
-    int64 file_byte_size = 5;
-    float file_cost = 6;
-    bool is_last_candidate = 7;
 }
