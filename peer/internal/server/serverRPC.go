@@ -158,6 +158,18 @@ type PeerInfo struct {
 func GetPeerTable() map[string]PeerInfo {
 	return peerTable
 }
+func DisconnectPeer(peerId string) error {
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		val.Connection = "NO"
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return nil
+}
 
 func getLocationFromIP(peerId string) (string, error) {
 	location := ""

@@ -61,21 +61,18 @@ func getPeer(w http.ResponseWriter, r *http.Request) {
 
 func removePeer(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		peerTable := GetPeerTable()
-		if peer, ok := peerTable[peerId]; ok {
-			jsonPeer, err := json.Marshal(peer)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Failed to convert Peer JSON Data into a string")
-				return
-			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.WriteHeader(http.StatusOK)
-			w.Write(jsonPeer)
-		} else {
+		var payload PeerIdPOSTPayload
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&payload); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Peer ID not found inside list of connected peer ids.")
+			writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
 			return
+		}
+		err := DisconnectPeer(payload.PeerID)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+		} else {
+			w.WriteHeader(http.StatusOK)
 		}
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
