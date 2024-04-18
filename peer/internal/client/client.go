@@ -33,38 +33,24 @@ func (client *Client) ImportFile(filePath string) error {
 	// Extract filename from the provided file path
 	_, fileName := filepath.Split(filePath)
 	if fileName == "" {
-		return fmt.Errorf("Provided path is a directory, not a file")
+		return errors.New("directory given, not file")
 	}
 
-	// Open the source file
-	file, err := os.Open(filePath)
+	src, err := os.Open(filePath)
 	if err != nil {
-		fmt.Print("\nFile does not exist\n> ")
-		return err
+		return errors.New("cant find given absolute file path")
 	}
-	defer file.Close()
-
-	// Create the directory if it doesn't exist
-	err = os.MkdirAll("./files", 0755)
+	defer src.Close()
+	destinationFile, err := os.Create("./files/" + fileName)
 	if err != nil {
-		return err
-	}
-
-	// Save the file to the destination directory with the same filename
-	destinationPath := filepath.Join("./files", fileName)
-	destinationFile, err := os.OpenFile(destinationPath, os.O_WRONLY|os.O_CREATE, 0666)
-	if err != nil {
-		return err
+		return errors.New("error creating destination file")
 	}
 	defer destinationFile.Close()
-
-	// Copy the contents of the source file to the destination file
-	_, err = io.Copy(destinationFile, file)
+	_, err = io.Copy(destinationFile, src)
 	if err != nil {
-		return err
+		return errors.New("error copying file")
 	}
-
-	fmt.Printf("\nFile '%s' imported successfully!\n> ", fileName)
+	fmt.Println("Sucessfully imported file")
 	return nil
 }
 

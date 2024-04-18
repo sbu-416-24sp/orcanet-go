@@ -130,7 +130,10 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			}
 		case "import":
 			if len(args) == 1 {
-				go client.ImportFile(args[0])
+				err := client.ImportFile(args[0])
+				if err != nil {
+					fmt.Println(err)
+				}
 			} else {
 				fmt.Println("Usage: import [filepath]")
 				fmt.Println()
