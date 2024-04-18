@@ -16,7 +16,7 @@ import (
 
 type GetFileJSONBody struct {
 	Filename string `json:"filename"`
-	Hash      string `json:"hash"`
+	Hash     string `json:"hash"`
 }
 
 type UploadFileJSONBody struct {
@@ -39,7 +39,7 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing 'hash' parameter", http.StatusBadRequest)
 		return
 	}
-	fmt.Println("hash:",hash)
+	fmt.Println("hash:", hash)
 	fileaddress := ""
 
 	if _, err := os.Stat("files/stored/" + hash); !os.IsNotExist(err) {
@@ -52,7 +52,7 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 		fileaddress = "files/" + hash
 	}
 	if fileaddress != "" {
-		fmt.Println("File address:",fileaddress)
+		fmt.Println("File address:", fileaddress)
 		http.ServeFile(w, r, fileaddress)
 
 	} else {
@@ -63,9 +63,7 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 }
 func getAllFiles(w http.ResponseWriter, r *http.Request) {
 
-
 }
-
 
 type FileInfo struct {
 	Filename     string `json:"filename"`
@@ -121,22 +119,22 @@ func getFileInfo(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getAllStored(w http.ResponseWriter,  r *http.Request) {
+func getAllStored(w http.ResponseWriter, r *http.Request) {
 
 	var fileInfoList []FileInfo
 
 	// Get a list of files in the directory
 	dirPath := "./files/stored/"
-    files, err := os.ReadDir(dirPath)
-    if err != nil {
-        w.WriteHeader(http.StatusInternalServerError)
+	files, err := os.ReadDir(dirPath)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		writeStatusUpdate(w, "1 Failed to convert JSON Data into a string")
 		return
-    }
+	}
 
-    // Iterate over each file
-    for _, file := range files {
-        // Construct the file path
+	// Iterate over each file
+	for _, file := range files {
+		// Construct the file path
 		filePath := filepath.Join(dirPath, file.Name())
 
 		fileData, err := os.ReadFile(filePath)
@@ -145,9 +143,9 @@ func getAllStored(w http.ResponseWriter,  r *http.Request) {
 			writeStatusUpdate(w, "Failed to read in file from given path")
 			return
 		}
-		st, err := os.Stat(filePath);
+		st, err := os.Stat(filePath)
 		lenData := len(fileData)
-	//	base64Encode := base64.StdEncoding.EncodeToString(fileData)
+		//	base64Encode := base64.StdEncoding.EncodeToString(fileData)
 		hash := sha256.Sum256(fileData)
 
 		// Encode the hash as a hexadecimal string
@@ -158,7 +156,7 @@ func getAllStored(w http.ResponseWriter,  r *http.Request) {
 			Filesize:     lenData,
 			Filehash:     hexHash,
 			Lastmodified: st.ModTime().String(),
-	//		Filecontent:  base64Encode,
+			//		Filecontent:  base64Encode,
 		}
 		//jsonData, err := json.Marshal(fileInfoResp)
 		if err != nil {
@@ -166,9 +164,9 @@ func getAllStored(w http.ResponseWriter,  r *http.Request) {
 			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
 			return
 		}
-        // Append FileInfo to the list
-        fileInfoList = append(fileInfoList, fileInfoResp)
-    }
+		// Append FileInfo to the list
+		fileInfoList = append(fileInfoList, fileInfoResp)
+	}
 	jsonData, err := json.Marshal(fileInfoList)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -179,7 +177,6 @@ func getAllStored(w http.ResponseWriter,  r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write(jsonData)
 }
-
 
 func writeStatusUpdate(w http.ResponseWriter, message string) {
 	responseMsg := map[string]interface{}{
@@ -253,7 +250,7 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		writeStatusUpdate(w, "Successfully uploaded file from local computer into files directory")
 		w.Write(jsonResponse)
 		return
-  }		
+	}
 }
 func deleteFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
@@ -276,19 +273,19 @@ func deleteFile(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			fileDir := "./files/"
-			filePath := "./files/"+payload.Hash
+			filePath := "./files/" + payload.Hash
 
 			// Check if the file exists in the "stored" directory
 			storedFilePath := filepath.Join(fileDir, "stored", payload.Hash)
 			if _, err := os.Stat(storedFilePath); err == nil {
-		//		filePath = storedFilePath
+				//		filePath = storedFilePath
 			}
 			// Check if the file exists in the "requested" directory
 			requestedFilePath := filepath.Join(fileDir, "requested", payload.Hash)
 			if _, err := os.Stat(requestedFilePath); err == nil {
 				filePath = requestedFilePath
 			}
-			fmt.Println("filePath: ",filePath)
+			fmt.Println("filePath: ", filePath)
 			// Attempt to delete the file
 			err := os.Remove(filePath)
 			if err != nil {
@@ -473,173 +470,6 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func addPeer(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload PeerInfo
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			peers.AddPeer(payload)
-			return
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
-		return
-	}
-
-}
-
-type PeerIdPOSTPayload struct {
-	PeerID string `json:"peerID"`
-}
-
-func getPeer(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload PeerIdPOSTPayload
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			currPeer, exists := peers.GetPeer(payload.PeerID)
-			if exists {
-				peerString, err := json.Marshal(currPeer)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					writeStatusUpdate(w, "Failed to marshal data from go object into a string")
-					return
-				}
-				w.Header().Set("Content-Type", "application/octet-stream")
-				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(peerString))
-				return
-			} else {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Unable to find a string with the given peer id")
-				return
-			}
-
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only GET requests will be handled.")
-		return
-	}
-
-}
-func getAllPeers(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload PeerIdPOSTPayload
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			allPeers := peers.GetAllPeers()
-			var peerStrings []string
-			for _, peer := range allPeers {
-				peerString, err := json.Marshal(peer)
-				if err != nil {
-					w.WriteHeader(http.StatusInternalServerError)
-					writeStatusUpdate(w, "Issue converting all peers into a string")
-					return
-				}
-				peerStrings = append(peerStrings, string(peerString))
-			}
-			jsonArrayPeerString := "[" + joinStrings(peerStrings, ",") + "]"
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(jsonArrayPeerString))
-			return
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only GET requests will be handled.")
-		return
-	}
-
-}
-func updatePeer(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload PeerInfo
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			peers.UpdatePeer(payload.PeerID, payload)
-			return
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
-		return
-	}
-
-}
-
-func removePeer(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodPost {
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			var payload PeerIdPOSTPayload
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			peers.RemovePeer(payload.PeerID)
-			return
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only POST requests will be handled.")
-		return
-	}
-
-}
-
 func InitServer() {
 	backend = NewBackend()
 	peers = NewPeerStorage()
@@ -655,13 +485,7 @@ func InitServer() {
 	http.HandleFunc("/setActivity", setActivity)
 	http.HandleFunc("/getActivities", getActivities)
 	http.HandleFunc("/writeFile", writeFile)
-	http.HandleFunc("/removePeer", removePeer)
-	http.HandleFunc("/updatePeer", updatePeer)
-	http.HandleFunc("/getAllPeers", getAllPeers)
-	http.HandleFunc("/getPeer", getPeer)
-	http.HandleFunc("/addPeer", addPeer)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
-
 
 }

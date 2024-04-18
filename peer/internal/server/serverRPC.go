@@ -155,6 +155,10 @@ type PeerInfo struct {
 	FlagUrl     string `json:"flagUrl"`
 }
 
+func GetPeerTable() map[string]PeerInfo {
+	return peerTable
+}
+
 func getLocationFromIP(peerId string) (string, error) {
 	location := ""
 	peerTableMUT.Lock()
@@ -207,7 +211,7 @@ func getLatency(peerId string) error {
 		// fmt.Printf("  Packets: Sent = %d, Received = %d, Lost = %d (%.2f%% loss),\n",
 		// 	stats.PacketsSent, stats.PacketsRecv, stats.PacketsSent-stats.PacketsRecv,
 		// 	stats.PacketLoss*100)
-		val.Latency = (stats.AvgRtt * 1000).String()
+		val.Latency = fmt.Sprint(stats.AvgRtt.Seconds() * 1000)
 		// fmt.Printf("  Minimum = %.2fms, Maximum = %.2fms, Average = %.2fms\n",
 		// 	stats.MinRtt.Seconds()*1000, stats.MaxRtt.Seconds()*1000, stats.AvgRtt.Seconds()*1000)
 		peerTable[peerId] = val

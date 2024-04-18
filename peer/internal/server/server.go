@@ -129,6 +129,9 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 		server.storeFile(w, r, confirming, confirmation)
 	})
 	http.HandleFunc("/sendTransaction", handleTransaction)
+	http.HandleFunc("/get-peers", getAllPeers)
+	http.HandleFunc("/get-peer", getPeer)
+	http.HandleFunc("/remove-peer", removePeer)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
