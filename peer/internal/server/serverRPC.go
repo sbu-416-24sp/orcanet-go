@@ -45,9 +45,6 @@ import (
 
 type fileShareServerNode struct {
 	fileshare.UnimplementedFileShareServer
-	savedFiles   map[string][]*fileshare.FileDesc // read-only after initialized
-	mu           sync.Mutex                       // protects routeNotes
-	currentCoins float64
 
 	K_DHT   *dht.IpfsDHT
 	PrivKey libp2pcrypto.PrivKey
@@ -343,6 +340,9 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 
 func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip string, port int32) error {
 	fileKey, err := orcaHash.GetFileKey(filePath, fileName)
+	if err != nil {
+		return err
+	}
 	fmt.Printf("Final Hashed: %s\n", fileKey)
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
@@ -351,7 +351,6 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 	fileReq.User.Ip = ip
 	fileReq.User.Port = port
 	fileReq.FileKey = fileKey
-	return nil
 	_, err = serverStruct.RegisterFile(ctx, &fileReq)
 	if err != nil {
 		return err
