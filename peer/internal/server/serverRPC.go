@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -24,6 +25,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
@@ -33,6 +35,7 @@ import (
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -51,6 +54,8 @@ type fileShareServerNode struct {
 
 var (
 	serverStruct fileShareServerNode
+	peerTable    map[string]PeerInfo
+	peerTableMUT sync.Mutex
 )
 
 func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool) {
@@ -140,17 +145,71 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 		panic(err)
 	}
 }
+
+type PeerInfo struct {
+	Location    string `json:"location"`
+	Latency     string `json:"latency"`
+	PeerID      string `json:"peerId"`
+	Connection  string `json:"connection"`
+	OpenStreams string `json:"openStreams"`
+	FlagUrl     string `json:"flagUrl"`
+}
+
+func getLocationFromIP(peerId string) (string, error) {
+	location := ""
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		mAddr, err := ma.NewMultiaddr(val.Connection)
+		if err != nil {
+			return "", errors.New("cannot convert multiaddress to IP")
+		}
+		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
+		if err != nil {
+			return "", nil
+		}
+		client := ipinfo.NewClient(nil)
+		coords, err := client.GetLocation(net.ParseIP(ipStr))
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Location = coords
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return "", errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return location, nil
+}
+
 func ListAllDHTPeers(ctx context.Context, host host.Host) {
+	peerTable = make(map[string]PeerInfo)
 	for {
-		time.Sleep(time.Second * 10)
+		time.Sleep(time.Second * 3)
 		peers := serverStruct.K_DHT.RoutingTable().ListPeers()
 		// Should make a channel that waits for this
 
 		for _, p := range peers {
-			_, err := serverStruct.K_DHT.FindPeer(ctx, p)
+			addr, err := serverStruct.K_DHT.FindPeer(ctx, p)
 			if err != nil {
 				fmt.Printf("Error finding peer %s: %s\n", p, err)
 				continue
+			}
+			key := addr.ID.String()
+			if _, ok := peerTable[key]; !ok {
+				connection := ""
+				if len(addr.Addrs) > 0 {
+					connection = addr.Addrs[0].String()
+				}
+				peerTable[key] = PeerInfo{
+					Location:    "",
+					Latency:     "",
+					PeerID:      addr.ID.String(),
+					Connection:  connection,
+					OpenStreams: "YES",
+					FlagUrl:     "",
+				}
+				go getLocationFromIP(key)
 			}
 		}
 	}

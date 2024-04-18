@@ -132,7 +132,6 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
-
 	http.ListenAndServe(":"+httpPort, nil)
 }
 
