@@ -112,7 +112,7 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 	defer resp.Body.Close()
 
 }
-func (client *Client) GetFileOnce(ip, port, filename string) error {
+func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error {
 	/*
 		file_hash := client.name_map.GetFileHash(filename)
 		if file_hash == "" {
@@ -120,30 +120,30 @@ func (client *Client) GetFileOnce(ip, port, filename string) error {
 			return
 		}
 	*/
-	data, err := client.getData(ip, port, filename)
+	data, err := client.getData(ip, port, file_hash)
 	if err != nil {
 		return err
 	}
-	resp, err := http.Get(fmt.Sprintf("http://%s:%s/requestFile/%s", ip, port, filename))
-	if err != nil {
-		return err
-	}
+	// resp, err := http.Get(fmt.Sprintf("http://%s:%s/requestFile/%s", ip, port, filename))
+	// if err != nil {
+	// 	return err
+	// }
 
-	fmt.Println("Response:")
-	fmt.Println(resp)
-	fmt.Println("ResponseBody:")
-	fmt.Println(resp.Body)
-	defer resp.Body.Close()
+	// fmt.Println("Response:")
+	// fmt.Println(resp)
+	// fmt.Println("ResponseBody:")
+	// fmt.Println(resp.Body)
+	// defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Error reading response body:", err)
-			return err
-		}
-		fmt.Printf("\nError: %s\n> ", body)
-		return err
-	}
+	// if resp.StatusCode != http.StatusOK {
+	// 	body, err := io.ReadAll(resp.Body)
+	// 	if err != nil {
+	// 		fmt.Println("Error reading response body:", err)
+	// 		return err
+	// 	}
+	// 	fmt.Printf("\nError: %s\n> ", body)
+	// 	return err
+	// }
 
 	// Create the directory if it doesn't exist
 	err = os.MkdirAll("./files/requested/", 0755)
@@ -152,17 +152,17 @@ func (client *Client) GetFileOnce(ip, port, filename string) error {
 	}
 
 	// Create file
-	_, err = os.Create("./files/requested/" + filename)
+	_, err = os.Create("./files/requested/" + file_hash)
 	if err != nil {
 		return err
 	}
 
-	err = os.WriteFile(filepath.Join("./files/requested/", filename), data, 0666)
+	err = os.WriteFile(filepath.Join("./files/requested/", file_hash), data, 0666)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("\nFile %s downloaded successfully!\n> ", filename)
+	fmt.Printf("\nFile %s downloaded successfully!\n> ", file_hash)
 	return nil
 }
 
@@ -186,7 +186,7 @@ func (client *Client) RequestStorage(ip, port, filename string) (string, error) 
 	return hash, err
 }
 
-func (client *Client) GetDirectory(ip, port, path string) {
+func (client *Client) GetDirectory(ip string, port int32, path string) {
 	data, err := client.getData(ip, port, path)
 	if err != nil {
 		fmt.Println("Failed to Get Directory")
@@ -205,7 +205,7 @@ func (client *Client) GetDirectory(ip, port, path string) {
 	}
 }
 
-func (client *Client) getDirectory(ip, port string, dir_tree map[string]any) error {
+func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]any) error {
 	for path, v := range dir_tree {
 		switch val := v.(type) {
 		case string:
@@ -321,14 +321,14 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 	return string(body), nil
 }
 
-func (client *Client) getData(ip, port, filename string) ([]byte, error) {
+func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, error) {
 
-	file_hash := client.name_map.GetFileHash(filename)
-	if file_hash == "" {
-		fmt.Println("Error: do not have hash for the file")
-		return nil, errors.New("name not found")
-	}
-	resp, err := http.Get(fmt.Sprintf("http://%s:%s/requestFile/%s", ip, port, file_hash))
+	// file_hash := client.name_map.GetFileHash(filename)
+	// if file_hash == "" {
+	// 	fmt.Println("Error: do not have hash for the file")
+	// 	return nil, errors.New("name not found")
+	// }
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s", ip, port, file_hash))
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		return nil, err
@@ -341,7 +341,7 @@ func (client *Client) getData(ip, port, filename string) ([]byte, error) {
 			fmt.Println("Error reading response body:", err)
 			return nil, err
 		}
-		fmt.Printf("\nError: %s\n> ", body)
+		fmt.Printf("\nError: %s\n ", body)
 		return nil, errors.New("http status not ok")
 	}
 

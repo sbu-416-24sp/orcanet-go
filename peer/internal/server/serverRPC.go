@@ -18,9 +18,11 @@ import (
 	"net"
 	"net/http"
 	"orca-peer/internal/fileshare"
+	orcaHash "orca-peer/internal/hash"
 	"os"
 	"sync"
 	"time"
+	"errors"
 
 	"google.golang.org/grpc"
 
@@ -276,18 +278,43 @@ func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash strin
 	}
 }
 
-func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32) error {
+func SetupRegisterFile(file_name string, amountPerMB int64, ip string, port int32) error {
+	srcFilePath := fmt.Sprintf("./files/%s", file_name)
+	fileInfo, err := os.Stat(srcFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return err
+		} else {
+			return errors.New("File does not exist in files folder.")
+		}
+	}
+
+	if fileInfo.IsDir() {
+		return errors.New("Specified file is a directory.")
+	}
+
+	hash, err := orcaHash.HashFile(file_name)
+	if err != nil {
+		return err
+	}
+
+	err = os.Rename(srcFilePath, fmt.Sprintf("./files/stored/%s", hash))
+	if err != nil {
+		return err
+	}
+	
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}
 	fileReq.User.Price = amountPerMB
 	fileReq.User.Ip = ip
 	fileReq.User.Port = port
-	fileReq.FileHash = fileHash
-	_, err := serverStruct.RegisterFile(ctx, &fileReq)
+	fileReq.FileHash = hash
+	_, err = serverStruct.RegisterFile(ctx, &fileReq)
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 

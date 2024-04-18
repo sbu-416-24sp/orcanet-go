@@ -101,9 +101,9 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
+				client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
 			} else {
-				fmt.Println("Usage: get [fileHash]")
+				fmt.Println("Usage: get [fileName]")
 				fmt.Println()
 			}
 		case "store":
@@ -120,12 +120,12 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				}
 				err = server.SetupRegisterFile(args[0], costPerMB, ip, int32(port))
 				if err != nil {
-					fmt.Printf("Unable to register file on DHT: %x", err)
+					fmt.Printf("Unable to register file on DHT: %s", err)
 				} else {
 					fmt.Println("Sucessfully registered file on DHT.")
 				}
 			} else {
-				fmt.Println("Usage: store [fileHash] [amount]")
+				fmt.Println("Usage: store [fileName] [amount]")
 				fmt.Println()
 			}
 		case "import":
@@ -177,7 +177,14 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			return
 		case "getdir":
 			if len(args) == 3 {
-				go client.GetDirectory(args[0], args[1], args[2])
+				port, err := strconv.ParseInt(args[1], 10, 32)
+				if err != nil {
+					fmt.Printf("Invalid port: %s\n", err)
+					fmt.Println()
+					continue
+				}
+
+				go client.GetDirectory(args[0], int32(port), args[2])
 			} else {
 				fmt.Println("Usage: getdir [ip] [port] [path]")
 				fmt.Println()
@@ -192,7 +199,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		case "help":
 			fmt.Println("COMMANDS:")
 			fmt.Println(" get [fileHash]                 Request a file from DHT")
-			fmt.Println(" store [fileHash] [amount]      Store a file on DHT")
+			fmt.Println(" store [fileName] [amount]      Store a file on DHT")
 			fmt.Println(" getdir [ip] [port] [path]      Request a directory")
 			fmt.Println(" storedir [ip] [port] [path]    Request storage of a directory")
 			fmt.Println(" import [filepath]              Import a file")
