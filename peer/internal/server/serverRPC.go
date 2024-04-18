@@ -133,11 +133,28 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	serverStruct.PubKey = pubKey
 	serverStruct.V = validator
 	fileshare.RegisterFileShareServer(s, &serverStruct)
+	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 	serverReady <- true
 	if err := s.Serve(lis); err != nil {
 		panic(err)
 	}
+}
+func ListAllDHTPeers(ctx context.Context, host host.Host) {
+	for {
+		time.Sleep(time.Second * 10)
+		peers := serverStruct.K_DHT.RoutingTable().ListPeers()
+		fmt.Println("Peers in DHT:")
+		for _, p := range peers {
+			addr, err := serverStruct.K_DHT.FindPeer(ctx, p)
+			if err != nil {
+				fmt.Printf("Error finding peer %s: %s\n", p, err)
+				continue
+			}
+			fmt.Printf("Peer ID: %s, Multiaddress:", addr)
+		}
+	}
+
 }
 
 /*
