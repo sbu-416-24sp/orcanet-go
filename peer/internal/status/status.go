@@ -92,13 +92,11 @@ func GetNetworkInfo() NetworkStatus {
 func GetLocationData() string {
 	ipapiClient := http.Client{}
 
-	req, err := http.NewRequest("GET", "https://ipapi.co/json/", nil)
+	ipv4Req, err := http.NewRequest("GET", "http://httpbin.org/ip", nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	req.Header.Set("User-Agent", "ipapi.co/#go-v1.4.01")
-
-	resp, err := ipapiClient.Do(req)
+	resp, err := ipapiClient.Do(ipv4Req)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -106,6 +104,32 @@ func GetLocationData() string {
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ipv4Body := string(body)
+	var ipv4JSON map[string]interface{}
+	err = json.Unmarshal([]byte(ipv4Body), &ipv4JSON)
+	if err != nil {
+		log.Fatal("Unable to establish user IP, please try again")
+		return ""
+	}
+
+	req, err := http.NewRequest("GET", fmt.Sprintf("https://ipapi.co/%s/json/", ipv4JSON["origin"].(string)), nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Set("User-Agent", "ipapi.co/#go-v1.4.01")
+
+	resp, err = ipapiClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer resp.Body.Close()
+
+	body, err = io.ReadAll(resp.Body)
 	if err != nil {
 		log.Fatal(err)
 	}

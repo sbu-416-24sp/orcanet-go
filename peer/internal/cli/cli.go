@@ -44,6 +44,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		return
 	}
 	ip = locationJson["ip"].(string)
+	fmt.Println(ip)
 	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey)
 	<-serverReady
 	fmt.Println("Welcome to Orcanet!")
