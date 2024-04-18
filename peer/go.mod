@@ -59,6 +59,9 @@ require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
+	github.com/ipinfo/go v1.0.0 // indirect
+	github.com/ipinfo/go-ipinfo v1.0.0 // indirect
+	github.com/ipinfo/go/v2 v2.10.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
@@ -90,6 +93,7 @@ require (
 	github.com/multiformats/go-varint v0.0.7 // indirect
 	github.com/onsi/ginkgo/v2 v2.15.0 // indirect
 	github.com/opencontainers/runtime-spec v1.2.0 // indirect
+	github.com/patrickmn/go-cache v2.1.0+incompatible // indirect
 	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.18.0 // indirect
