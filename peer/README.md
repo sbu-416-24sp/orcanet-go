@@ -1,36 +1,9 @@
 # Peer Node
 
-## Basic Functionality
-
-* Retrieving
-    1) Find addresses corresponding with a specific file hash inside the DHT
-    2) Connect through HTTP with the cheapest option
-    3) Recieve chunks from the HTTP server
-        1) If the file is small (< 4KB), the entire transaction is done in one go
-        2) Otherwise, files are sent in chunks
-            1) A signed transaction must be sent to the sender
-    4) Close connection
-    5) Add file to imported folder inside files directory
-
-* Storing
-    1) Hash the file content that you are trying to store
-    2) Send a request to store the file in to the DHT
-    3) Make sure file is inside the stored folder inside files directory
-    4) Accept/Decline any requests for said file, or set the default behavior
-    5) Send all microtransactions to blockchain once everything is done
-
-
-## Assumptions
-
-1) Each consumer/producer has their own IP address
-
-2) Producer sets up local HTTP server
-
-3) Consumer can fetch document from producer's local HTTP server
-
 ## Installation
 
-* Information about installig proto buffer compiler is found [HERE](https://grpc.io/docs/protoc-installation/)
+* Make sure golang is installed: The version used for this project is 1.21.4
+* Information about installing proto buffer compiler is found [HERE](https://grpc.io/docs/protoc-installation/)
 
 The basic steps are:
 
@@ -47,7 +20,7 @@ $ export PATH="$PATH:$(go env GOPATH)/bin"
 
 ## Running
 
-First generate the gRPC files for GO. Make sure you are in the root of the project and run the command below.
+First generate the gRPC files for GO. Make sure you are in the peer folder of the project and run the command below.
 
 ``` bash
 
@@ -69,17 +42,21 @@ $ make
 
 ```
 
-GO Version: 1.21.4
+Finally, return the the peer folder and run make.
 
 ```bash
+
+$ cd ../peer
 
 $ make all
 
 ```
 
+This will start up the peer node. You should see output in the terminal. You will need to enter in <i>three<i> numbers into the terminal before the peer node is fully running. These three numbers will be the port numbers used by the peer node to connect with various services. 
+
 ## CLI interface
 
-Get a file from the DHT.
+Get a file from the DHT. You should pass a specific hash.
 
 ```bash
 
@@ -87,13 +64,13 @@ $ get [fileHash]
 
 ```
 
-Storing a file in the DHT for a given price.
+Storing a file in the DHT for a given price. You should pass ONLY the file name, given the file is in the files folder (inside peers).
 
 ```bash
-$ store [fileHash] [amount]
+$ store [filename] [amount]
 ```
 
-Import a file into the files directory:
+Import a file into the files directory. You can pass it any filepath, but if the path is relative. It will be rooted in the ./peer folder. It is best to just use an absolute path.
 
 ```bash
 $ import [filepath]
@@ -107,7 +84,7 @@ $ send [amount] [ip]
 
 ```
 
-Hash a file
+Hash a file. Only files inside the files folder can be found. Only pass relative paths. You should not need to hash any files: this should be handled internally.
 
 ```bash
 
