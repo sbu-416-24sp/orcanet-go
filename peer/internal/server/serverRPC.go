@@ -25,6 +25,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	"github.com/go-ping/ping"
 	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
@@ -182,6 +183,47 @@ func getLocationFromIP(peerId string) (string, error) {
 	return location, nil
 }
 
+func getLatency(peerId string) error {
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		mAddr, err := ma.NewMultiaddr(val.Connection)
+		if err != nil {
+			return errors.New("cannot convert multiaddress to IP")
+		}
+		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
+		if err != nil {
+			return nil
+		}
+		pinger, err := ping.NewPinger(ipStr)
+		if err != nil {
+			fmt.Printf("Error creating pinger: %s\n", err)
+			return errors.New("cant create pinger")
+		}
+
+		pinger.Count = 3
+		pinger.Timeout = time.Second * 2
+		pinger.Size = 64
+		pinger.Run()
+		stats := pinger.Statistics()
+		// fmt.Printf("  Packets: Sent = %d, Received = %d, Lost = %d (%.2f%% loss),\n",
+		// 	stats.PacketsSent, stats.PacketsRecv, stats.PacketsSent-stats.PacketsRecv,
+		// 	stats.PacketLoss*100)
+		val.Latency = (stats.AvgRtt * 1000).String()
+		// fmt.Printf("  Minimum = %.2fms, Maximum = %.2fms, Average = %.2fms\n",
+		// 	stats.MinRtt.Seconds()*1000, stats.MaxRtt.Seconds()*1000, stats.AvgRtt.Seconds()*1000)
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return nil
+}
+func UpdateAllPeerLatency() {
+	for peerId := range peerTable {
+		go getLatency(peerId)
+	}
+}
 func ListAllDHTPeers(ctx context.Context, host host.Host) {
 	peerTable = make(map[string]PeerInfo)
 	for {
@@ -212,8 +254,8 @@ func ListAllDHTPeers(ctx context.Context, host host.Host) {
 				go getLocationFromIP(key)
 			}
 		}
+		go UpdateAllPeerLatency()
 	}
-
 }
 
 /*
