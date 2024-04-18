@@ -104,10 +104,20 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
 			} else {
 				fmt.Println("Usage: get [fileHash]")
-				fmt.Println()
 			}
 		case "store":
 			if len(args) == 2 {
+				fileName := args[0]
+				filePath := "./files/" + fileName
+				if _, err := os.Stat(filePath); err == nil {
+
+				} else if os.IsNotExist(err) {
+					fmt.Println("file does not exist inside files folder")
+					continue
+				} else {
+					fmt.Println("error checking file's existence, please try again")
+					continue
+				}
 				costPerMB, err := strconv.ParseInt(args[1], 10, 64)
 				if err != nil {
 					fmt.Println("Error parsing in cost per MB: must be a int64", err)
@@ -118,15 +128,14 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					fmt.Println("Error parsing in port: must be a integer.", err)
 					continue
 				}
-				err = server.SetupRegisterFile(args[0], costPerMB, ip, int32(port))
+				err = server.SetupRegisterFile(filePath, fileName, costPerMB, ip, int32(port))
 				if err != nil {
 					fmt.Printf("Unable to register file on DHT: %x", err)
 				} else {
 					fmt.Println("Sucessfully registered file on DHT.")
 				}
 			} else {
-				fmt.Println("Usage: store [fileHash] [amount]")
-				fmt.Println()
+				fmt.Println("Usage: store [fileName] [amount]")
 			}
 		case "import":
 			if len(args) == 1 {
@@ -136,7 +145,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				}
 			} else {
 				fmt.Println("Usage: import [filepath]")
-				fmt.Println()
 			}
 		case "location":
 			fmt.Println(orcaStatus.GetLocationData())
@@ -160,7 +168,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				orcaHash.HashFile(args[0])
 			} else {
 				fmt.Println("Usage: hash [fileName]")
-				fmt.Println()
 			}
 		case "send":
 			if len(args) == 3 {
@@ -172,9 +179,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				orcaClient.SendTransaction(cost, args[1], args[2], pubKey, privKey)
 			} else {
 				fmt.Println("Usage: send [amount] [ip] [port]")
-				fmt.Println()
 			}
-
 		case "exit":
 			fmt.Println("Exiting...")
 			return
@@ -183,19 +188,17 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				go client.GetDirectory(args[0], args[1], args[2])
 			} else {
 				fmt.Println("Usage: getdir [ip] [port] [path]")
-				fmt.Println()
 			}
 		case "storedir":
 			if len(args) == 3 {
 				go client.StoreDirectory(args[0], args[1], args[2])
 			} else {
 				fmt.Println("Usage: storedir [ip] [port] [path]")
-				fmt.Println()
 			}
 		case "help":
 			fmt.Println("COMMANDS:")
 			fmt.Println(" get [fileHash]                 Request a file from DHT")
-			fmt.Println(" store [fileHash] [amount]      Store a file on DHT")
+			fmt.Println(" store [fileName] [amount]      Store a file on DHT")
 			fmt.Println(" getdir [ip] [port] [path]      Request a directory")
 			fmt.Println(" storedir [ip] [port] [path]    Request storage of a directory")
 			fmt.Println(" import [filepath]              Import a file")
@@ -205,10 +208,8 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			fmt.Println(" location                       Print your location")
 			fmt.Println(" network                        Test speed of network")
 			fmt.Println(" exit                           Exit the program")
-			fmt.Print()
 		default:
 			fmt.Println("Unknown command. Type 'help' for available commands.")
-			fmt.Println()
 		}
 	}
 }

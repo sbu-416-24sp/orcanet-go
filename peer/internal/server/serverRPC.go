@@ -25,6 +25,8 @@ import (
 
 	"google.golang.org/grpc"
 
+	orcaHash "orca-peer/internal/hash"
+
 	"github.com/go-ping/ping"
 	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
@@ -339,15 +341,18 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32) error {
+func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip string, port int32) error {
+	fileKey, err := orcaHash.GetFileKey(filePath, fileName)
+	fmt.Printf("Final Hashed: %s\n", fileKey)
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}
 	fileReq.User.Price = amountPerMB
 	fileReq.User.Ip = ip
 	fileReq.User.Port = port
-	fileReq.FileKey = fileHash
-	_, err := serverStruct.RegisterFile(ctx, &fileReq)
+	fileReq.FileKey = fileKey
+	return nil
+	_, err = serverStruct.RegisterFile(ctx, &fileReq)
 	if err != nil {
 		return err
 	}
