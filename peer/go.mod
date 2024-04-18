@@ -4,13 +4,13 @@ go 1.21.4
 
 require (
 	github.com/cbergoon/speedtest-go v1.1.0
-	github.com/golang/protobuf v1.5.3
+	github.com/golang/protobuf v1.5.4
 	github.com/libp2p/go-libp2p v0.33.2
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-record v0.2.0
 	github.com/multiformats/go-multiaddr v0.12.3
-	google.golang.org/grpc v1.62.1
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/grpc v1.63.2
+	google.golang.org/protobuf v1.33.0
 )
 
 require (
@@ -119,6 +119,6 @@ require (
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/tools v0.18.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240123012728-ef4313101c80 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240227224415-6ceb2ff114de // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 )
