@@ -346,7 +346,7 @@ func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32
 	fileReq.User.Price = amountPerMB
 	fileReq.User.Ip = ip
 	fileReq.User.Port = port
-	fileReq.FileHash = fileHash
+	fileReq.FileKey = fileHash
 	_, err := serverStruct.RegisterFile(ctx, &fileReq)
 	if err != nil {
 		return err
@@ -366,7 +366,7 @@ func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32
  *   An error, if any
  */
 func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
-	hash := in.GetFileHash()
+	hash := in.GetFileKey()
 	pubKeyBytes, err := s.PubKey.Raw()
 	if err != nil {
 		return nil, err
@@ -439,7 +439,7 @@ func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.Re
 	}
 	value = append(value, record...)
 
-	err = s.K_DHT.PutValue(ctx, "orcanet/market/"+in.GetFileHash(), value)
+	err = s.K_DHT.PutValue(ctx, "orcanet/market/"+in.GetFileKey(), value)
 	if err != nil {
 		return nil, err
 	}
@@ -449,7 +449,7 @@ func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.Re
 func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
 	ctx := context.Background()
 	fileReq := fileshare.CheckHoldersRequest{}
-	fileReq.FileHash = fileHash
+	fileReq.FileKey = fileHash
 	holdersResponse, err := serverStruct.CheckHolders(ctx, &fileReq)
 	if err != nil {
 		return nil, err
@@ -469,7 +469,7 @@ func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
  *   An error, if any
  */
 func (s *fileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.CheckHoldersRequest) (*fileshare.HoldersResponse, error) {
-	hash := in.GetFileHash()
+	hash := in.GetFileKey()
 	users := make([]*fileshare.User, 0)
 	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/"+hash)
 	if err != nil {

@@ -36,16 +36,27 @@ message User {
 }
 
 message CheckHoldersRequest {
-  string fileHash = 1;
+  // Hash of FileInfo
+  string fileKey = 1; 
 }
 
 message RegisterFileRequest {
   User user = 1;
-  string fileHash = 2;
+  // Hash of FileInfo
+  string fileKey = 2;
 }
 
 message HoldersResponse {
-  repeated User holders = 1;
+  FileInfo fileInfo = 1;
+  repeated User holders = 2;
+}
+message FileInfo {
+  string fileHash = 1;
+  repeated string chunkHashes = 2;
+
+  // Size of the file in Bytes
+  int64 fileSize = 3;
+  string fileName = 4;
 }
 
 message FileRequestTransaction{
