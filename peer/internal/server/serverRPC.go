@@ -339,61 +339,6 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func runNotifyStore(client fileshare.FileShareClient, file *fileshare.FileDesc) *fileshare.StorageACKResponse {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ackResponse, err := client.NotifyFileStore(ctx, file)
-	if err != nil {
-		log.Fatalf("client.NotifyFileStorage failed: %v", err)
-	}
-	log.Printf("ACK Response: %v", ackResponse)
-	return ackResponse
-}
-
-func runNotifyUnstore(client fileshare.FileShareClient, file *fileshare.FileDesc) *fileshare.StorageACKResponse {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ackResponse, err := client.NotifyFileUnstore(ctx, file)
-	if err != nil {
-		log.Fatalf("client.NotifyFileStorage failed: %v", err)
-	}
-	log.Printf("ACK Response: %v", ackResponse)
-	return ackResponse
-}
-
-func NotifyStoreWrapper(client fileshare.FileShareClient, file_name_hash string, file_name string, file_size_bytes int64, file_origin_address string, origin_user_id string, file_cost float32, file_data_hash string, file_bytes []byte) {
-	var file_description = fileshare.FileDesc{FileNameHash: file_name_hash,
-		FileName:          file_name,
-		FileSizeBytes:     file_size_bytes,
-		FileOriginAddress: file_origin_address,
-		OriginUserId:      origin_user_id,
-		FileCost:          file_cost,
-		FileDataHash:      file_data_hash,
-		FileBytes:         file_bytes}
-	var ack = runNotifyUnstore(client, &file_description)
-	if ack.IsAcknowledged {
-		fmt.Printf("[Server]: Market acknowledged stopping storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	} else {
-		fmt.Printf("[Server]: Unable to notify market that we are stopping the storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	}
-}
-func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash string, file_name string, file_size_bytes int64, file_origin_address string, origin_user_id string, file_cost float32, file_data_hash string, file_bytes []byte) {
-	var file_description = fileshare.FileDesc{FileNameHash: file_name_hash,
-		FileName:          file_name,
-		FileSizeBytes:     file_size_bytes,
-		FileOriginAddress: file_origin_address,
-		OriginUserId:      origin_user_id,
-		FileCost:          file_cost,
-		FileDataHash:      file_data_hash,
-		FileBytes:         file_bytes}
-	var ack = runNotifyUnstore(client, &file_description)
-	if ack.IsAcknowledged {
-		fmt.Printf("[Server]: Market acknowledged stopping storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	} else {
-		fmt.Printf("[Server]: Unable to notify market that we are stopping the storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	}
-}
-
 func SetupRegisterFile(fileHash string, amountPerMB int64, ip string, port int32) error {
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
