@@ -144,14 +144,14 @@ func ListAllDHTPeers(ctx context.Context, host host.Host) {
 	for {
 		time.Sleep(time.Second * 10)
 		peers := serverStruct.K_DHT.RoutingTable().ListPeers()
-		fmt.Println("Peers in DHT:")
+		// Should make a channel that waits for this
+
 		for _, p := range peers {
-			addr, err := serverStruct.K_DHT.FindPeer(ctx, p)
+			_, err := serverStruct.K_DHT.FindPeer(ctx, p)
 			if err != nil {
 				fmt.Printf("Error finding peer %s: %s\n", p, err)
 				continue
 			}
-			fmt.Printf("Peer ID: %s, Multiaddress:", addr)
 		}
 	}
 
