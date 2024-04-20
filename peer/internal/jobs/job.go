@@ -1,78 +1,30 @@
-package job
+package jobs
 
-type Job struct {
-	FileHash        string `json:"fileHash"`
-	JobId           string `json:"jobID"`
-	TimeQueued      string `json:"timeQueued"`
-	Status          string `json:"status"`
-	AccumulatedCost int    `json:"accumulatedCost"`
-	ProjectedCost   int    `json:"projectedCost"`
-	ETA             int    `json:"eta"`
-	PeerId          string `json:"peer"`
+import (
+	"encoding/json"
+	"os"
+)
+
+func LoadHistory() ([]Job, error) {
+	fileData, err := os.ReadFile("./internal/jobs/jobs.json")
+	if err != nil {
+		return nil, err
+	}
+	var jobs []Job
+	err = json.Unmarshal(fileData, &jobs)
+	if err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
-type JobInfo struct {
-}
-
-func LoadHistory() {
-
-}
-func SaveHistory() {
-
-}
-func RemoveFromHistoryHandler() {
-
-}
-
-func ClearHistoryHandler() {
-
-}
-
-type AddJobReqPayload struct {
-	FileHash string `json:"fileHash"`
-	PeerId   string `json:"peer"`
-}
-
-type AddJobResPayload struct {
-	JobId string `json:"jobID"`
-}
-
-func AddJobHandler() {
-
-}
-
-type JobInfoReqPayload struct {
-	JobId string `json:"jobID"`
-}
-
-func JobInfoHandler() {
-
-}
-
-type JobPeerReqPayload struct {
-	FileHash string `json:"fileHash"`
-	PeerId   string `json:"peer"`
-}
-
-type JobPeerResPayload struct {
-	JobId             string `json:"ipAddress"`
-	Region            string `json:"region"`
-	Liked             bool   `json:"liked"`
-	Status            string `json:"status"`
-	AccumulatedMemory string `json:"accumulatedMemory"`
-	Price             string `json:"price"`
-}
-
-func JobPeerHandler() {
-
-}
-func StartJobsHandler() {
-
-}
-
-func PauseJobsHandler() {
-
-}
-
-func TerminateJobsHandler() {
-
+func SaveHistory(jobs []Job) error {
+	jsonData, err := json.Marshal(jobs)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile("./internal/jobs/jobs.json", jsonData, 0644)
+	if err != nil {
+		return err
+	}
+	return nil
 }
