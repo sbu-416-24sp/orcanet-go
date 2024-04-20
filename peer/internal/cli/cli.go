@@ -44,6 +44,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		return
 	}
 	ip = locationJson["ip"].(string)
+	fmt.Println(ip)
 	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey)
 	<-serverReady
 	fmt.Println("Welcome to Orcanet!")
@@ -101,9 +102,14 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
+				client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
 			} else {
+<<<<<<< HEAD
 				fmt.Println("Usage: get [fileHash]")
+=======
+				fmt.Println("Usage: get [fileName]")
+				fmt.Println()
+>>>>>>> 6967a0127d97fa62af1645049673ab584df49be5
 			}
 		case "store":
 			if len(args) == 2 {
@@ -130,12 +136,16 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				}
 				err = server.SetupRegisterFile(filePath, fileName, costPerMB, ip, int32(port))
 				if err != nil {
-					fmt.Printf("Unable to register file on DHT: %x", err)
+					fmt.Printf("Unable to register file on DHT: %s", err)
 				} else {
 					fmt.Println("Sucessfully registered file on DHT.")
 				}
 			} else {
 				fmt.Println("Usage: store [fileName] [amount]")
+<<<<<<< HEAD
+=======
+				fmt.Println()
+>>>>>>> 6967a0127d97fa62af1645049673ab584df49be5
 			}
 		case "import":
 			if len(args) == 1 {
@@ -185,7 +195,14 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			return
 		case "getdir":
 			if len(args) == 3 {
-				go client.GetDirectory(args[0], args[1], args[2])
+				port, err := strconv.ParseInt(args[1], 10, 32)
+				if err != nil {
+					fmt.Printf("Invalid port: %s\n", err)
+					fmt.Println()
+					continue
+				}
+
+				go client.GetDirectory(args[0], int32(port), args[2])
 			} else {
 				fmt.Println("Usage: getdir [ip] [port] [path]")
 			}

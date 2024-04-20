@@ -19,13 +19,12 @@ import (
 	"net"
 	"net/http"
 	"orca-peer/internal/fileshare"
+	orcaHash "orca-peer/internal/hash"
 	"os"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc"
-
-	orcaHash "orca-peer/internal/hash"
 
 	"github.com/go-ping/ping"
 	"github.com/ipinfo/go/ipinfo"
@@ -371,6 +370,7 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 	if err != nil {
 		return err
 	}
+
 	return nil
 }
 
