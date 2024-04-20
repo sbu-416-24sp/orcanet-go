@@ -104,12 +104,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
 				client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
 			} else {
-<<<<<<< HEAD
 				fmt.Println("Usage: get [fileHash]")
-=======
-				fmt.Println("Usage: get [fileName]")
-				fmt.Println()
->>>>>>> 6967a0127d97fa62af1645049673ab584df49be5
 			}
 		case "store":
 			if len(args) == 2 {
@@ -142,10 +137,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				}
 			} else {
 				fmt.Println("Usage: store [fileName] [amount]")
-<<<<<<< HEAD
-=======
-				fmt.Println()
->>>>>>> 6967a0127d97fa62af1645049673ab584df49be5
 			}
 		case "import":
 			if len(args) == 1 {
