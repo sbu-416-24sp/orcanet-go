@@ -203,11 +203,11 @@ func ClearHistory() {
 	newJobs := make([]Job, 0)
 	for _, job := range manager.Jobs {
 		if job.Status != "completed" {
+			manager.Changed = true
 			newJobs = append(newJobs, job)
 		}
 	}
 	manager.Jobs = newJobs
-	manager.Changed = true
 	manager.Mutex.Unlock()
 }
 
@@ -251,4 +251,16 @@ func StartJob(jobId string) error {
 	}
 	manager.Mutex.Unlock()
 	return errors.New("Unable to find jobId: " + jobId)
+}
+
+func FindJob(jobId string) (Job, error) {
+	manager.Mutex.Lock()
+	for _, job := range manager.Jobs {
+		if job.JobId == jobId {
+			manager.Mutex.Unlock()
+			return job, nil
+		}
+	}
+	manager.Mutex.Unlock()
+	return Job{}, errors.New("unable to find job with specified jobId")
 }

@@ -142,8 +142,30 @@ type JobInfoReqPayload struct {
 	JobId string `json:"jobID"`
 }
 
-func JobInfoHandler() {
-
+func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		queryParams := r.URL.Query()
+		jobId := queryParams.Get("jobID")
+		job, err := FindJob(jobId)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, err.Error())
+			return
+		}
+		jsonData, err := json.Marshal(job)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		return
+	}
 }
 
 type JobPeerReqPayload struct {
