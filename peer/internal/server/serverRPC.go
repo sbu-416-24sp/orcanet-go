@@ -23,6 +23,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"strings"
 
 	"google.golang.org/grpc"
 
@@ -179,7 +180,7 @@ func getLocationFromIP(peerId string) (string, error) {
 			return "", errors.New("cannot convert multiaddress to IP")
 		}
 		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
-		if err != nil {
+		if err != nil || strings.Contains(ipStr, "127.0.0.1") {
 			return "", nil
 		}
 		client := ipinfo.NewClient(nil)
