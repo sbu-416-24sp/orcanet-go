@@ -122,6 +122,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 		storage: hash.NewDataStore("files/stored/"),
 	}
 	orcaJobs.InitJobRoutes()
+	go orcaJobs.InitPeriodicJobSave()
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
