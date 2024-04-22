@@ -23,6 +23,7 @@ import (
 	"os"
 	"sync"
 	"time"
+	"strings"
 
 	"google.golang.org/grpc"
 
@@ -139,7 +140,8 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	fileshare.RegisterFileShareServer(s, &serverStruct)
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
-	serverReady <- true
+
+	serverReady <- true	
 	if err := s.Serve(lis); err != nil {
 		panic(err)
 	}
@@ -179,7 +181,7 @@ func getLocationFromIP(peerId string) (string, error) {
 			return "", errors.New("cannot convert multiaddress to IP")
 		}
 		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
-		if err != nil {
+		if err != nil || strings.Contains(ipStr, "127.0.0.1") {
 			return "", nil
 		}
 		client := ipinfo.NewClient(nil)
@@ -359,6 +361,43 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 		return err
 	}
 	fmt.Printf("Final Hashed: %s\n", fileKey)
+
+	srcFilePath := fmt.Sprintf("./files/%s", fileName)
+	fileInfo, err := os.Stat(srcFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return err
+		} else {
+			return errors.New("File does not exist in files folder.")
+		}
+	}
+
+	if fileInfo.IsDir() {
+		return errors.New("Specified file is a directory.")
+	}
+
+	srcFile, err := os.Open(srcFilePath)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	destFile, err := os.Create("./files/stored/" + fileKey)
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
+
+	_, err = io.Copy(destFile, srcFile)
+	if err != nil {
+		return err
+	}
+
+	err = destFile.Sync()
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}

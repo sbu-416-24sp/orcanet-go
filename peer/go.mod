@@ -4,7 +4,9 @@ go 1.21.4
 
 require (
 	github.com/cbergoon/speedtest-go v1.1.0
+	github.com/go-ping/ping v1.1.0
 	github.com/golang/protobuf v1.5.4
+	github.com/ipinfo/go v1.0.0
 	github.com/libp2p/go-libp2p v0.33.2
 	github.com/libp2p/go-libp2p-kad-dht v0.25.2
 	github.com/libp2p/go-libp2p-record v0.2.0
@@ -50,7 +52,6 @@ require (
 	github.com/elastic/gosigar v0.14.2 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/francoispqt/gojay v1.2.13 // indirect
-	github.com/go-ping/ping v1.1.0 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/godbus/dbus/v5 v5.1.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -60,9 +61,7 @@ require (
 	github.com/huin/goupnp v1.3.0 // indirect
 	github.com/ipfs/go-cid v0.4.1 // indirect
 	github.com/ipfs/go-log/v2 v2.5.1 // indirect
-	github.com/ipinfo/go v1.0.0 // indirect
 	github.com/ipinfo/go-ipinfo v1.0.0 // indirect
-	github.com/ipinfo/go/v2 v2.10.0 // indirect
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
 	github.com/klauspost/compress v1.17.6 // indirect
