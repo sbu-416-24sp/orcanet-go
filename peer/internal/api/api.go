@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	orcaHash "orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"os"
 	"path/filepath"
 )
@@ -474,12 +475,12 @@ func InitServer() {
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()
+	orcaJobs.InitJobRoutes()
 	http.HandleFunc("/get-file", getFile)
 	http.HandleFunc("/getAllStored", getAllStored)
 	http.HandleFunc("/get-file-info", getFileInfo)
 	http.HandleFunc("/upload-file", uploadFile)
 	http.HandleFunc("/delete-file", deleteFile)
-
 	http.HandleFunc("/updateActivityName", updateActivityName)
 	http.HandleFunc("/removeActivity", removeActivity)
 	http.HandleFunc("/setActivity", setActivity)
@@ -487,5 +488,4 @@ func InitServer() {
 	http.HandleFunc("/writeFile", writeFile)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
-
 }
