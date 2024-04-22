@@ -437,65 +437,57 @@ var FreshNetParams = Params{
 	// need to define a port num so that peers can communicate in different networks by
 	// looking at the port number
 	DefaultPort: "41600",
-	// TODO: seed nodes left blank for now
-	DNSSeeds: []DNSSeed{
-		{"ns1.orca.com", true},
-	},
-
+	// Leaving Seed nodes blank for now
+	DNSSeeds: []DNSSeed{},
 	// Chain parameters
 	GenesisBlock: &freshNetGenesisBlock,
 	GenesisHash:  &freshNetGenesisHash,
 	PowLimit:     freshNetPowLimit,
 	// determines how difficult to mine
-
-	PowLimitBits:  0x207fffff,
-	BIP0034Height: 227931, // 000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
-	BIP0065Height: 388381, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
-	BIP0066Height: 363725, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
+	PowLimitBits:  0x1d00ffff,
+	BIP0034Height: 227931, //000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
+	BIP0065Height: 388381, //000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
+	BIP0066Height: 363725, //00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
 	// defines the number of confirmations required before newly mined coins can be spent.
 	// Lowering this value reduces the waiting time for miners to spend their rewards, which can incentivize mining
 	CoinbaseMaturity:         1,
-	SubsidyReductionInterval: 150,
+	SubsidyReductionInterval: 210000,
 	// widens the window for difficulty adjustments.
 	TargetTimespan: time.Hour * 24 * 14, // 14 days
 	// to slow down the block production rate
 	TargetTimePerBlock: time.Minute * 10, // 10 minutes
-
 	// controls how much the difficulty can adjust in each retargeting period.
 	// Lowering this value allows for more significant adjustments,
 	// which can help the network quickly adapt to changes in mining power or difficulty
 	RetargetAdjustmentFactor: 4, // 25% less, 400% more
 	ReduceMinDifficulty:      true,
-	MinDiffReductionTime:     time.Minute * 20,
+	MinDiffReductionTime:     0,
 	// can use generate command from RPC to generate blocks in lieu of standard mining procedures
-	GenerateSupported: true,
-
+	GenerateSupported: false,
 	// Checkpoints ordered from oldest to newest.
 	// these are specific blocks as the chain grows to maintain stability and security
 	Checkpoints: nil,
-
 	// Consensus rule change deployments.
 	// The miner confirmation window is defined as:
-	//   target proof of work timespan / target proof of work spacing
-	RuleChangeActivationThreshold: 108, // 75% of MinerConfirmationWindow
-	MinerConfirmationWindow:       144,
-
+	// target proof of work timespan / target proof of work spacing
+	RuleChangeActivationThreshold: 1916, // 95% of MinerConfirmationWindow
+	MinerConfirmationWindow:       2016, //
 	// can leave this as is, unless we want to change the consensus rules
 	// these are rules that everyone must follows to reach an agreeable state of the network
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
 			BitNumber: 28,
 			DeploymentStarter: NewMedianTimeDeploymentStarter(
-				time.Time{}, // Always available for vote
+				time.Unix(11991456010, 0), // January 1, 2008 UTC
 			),
 			DeploymentEnder: NewMedianTimeDeploymentEnder(
-				time.Time{}, // Never expires
+				time.Unix(1230767999, 0), // December 31, 2008 UTC
 			),
 		},
 		DeploymentTestDummyMinActivation: {
 			BitNumber:                 22,
-			CustomActivationThreshold: 72,  // Only needs 50% hash rate.
-			MinActivationHeight:       600, // Can only activate after height 600.
+			CustomActivationThreshold: 1815,    // Only needs 90% hash rate.
+			MinActivationHeight:       10_0000, // Can only activate after height 10k.
 			DeploymentStarter: NewMedianTimeDeploymentStarter(
 				time.Time{}, // Always available for vote
 			),
@@ -506,40 +498,38 @@ var FreshNetParams = Params{
 		DeploymentCSV: {
 			BitNumber: 0,
 			DeploymentStarter: NewMedianTimeDeploymentStarter(
-				time.Time{}, // Always available for vote
+				time.Unix(1462060800, 0), // May 1st, 2016
 			),
 			DeploymentEnder: NewMedianTimeDeploymentEnder(
-				time.Time{}, // Never expires
+				time.Unix(1493596800, 0), // May 1st, 2017
 			),
 		},
 		DeploymentSegwit: {
 			BitNumber: 1,
 			DeploymentStarter: NewMedianTimeDeploymentStarter(
-				time.Time{}, // Always available for vote
+				time.Unix(1479168000, 0), // November 15, 2016 UTC
 			),
 			DeploymentEnder: NewMedianTimeDeploymentEnder(
-				time.Time{}, // Never expires.
+				time.Unix(1510704000, 0), // November 15, 2017 UTC.
 			),
 		},
 		DeploymentTaproot: {
 			BitNumber: 2,
 			DeploymentStarter: NewMedianTimeDeploymentStarter(
-				time.Time{}, // Always available for vote
+				time.Unix(1619222400, 0), // April 24th, 2021 UTC.
 			),
 			DeploymentEnder: NewMedianTimeDeploymentEnder(
-				time.Time{}, // Never expires.
+				time.Unix(1628640000, 0), // August 11th, 2021 UTC.
 			),
-			CustomActivationThreshold: 108, // Only needs 75% hash rate.
+			CustomActivationThreshold: 1815, // 90%
+			MinActivationHeight:       709_632,
 		},
 	},
-
 	// Mempool parameters
 	RelayNonStdTxs: false,
-
-	// Human-readable part for Bech32 encoded segwit addresses, as defined in
+	// Human-readable part for Bech32 encoded segwit addresses, as definedin
 	// BIP 173.
 	Bech32HRPSegwit: "bc", // always bc for main net
-
 	// Address encoding magics
 	// these are used to determine the type of network for a particular address
 	PubKeyHashAddrID:        0x00, // starts with 1
@@ -547,12 +537,10 @@ var FreshNetParams = Params{
 	PrivateKeyID:            0x80, // starts with 5 (uncompressed) or K (compressed)
 	WitnessPubKeyHashAddrID: 0x06, // starts with p2
 	WitnessScriptHashAddrID: 0x0A, // starts with 7Xh
-
 	// BIP32 hierarchical deterministic extended key magics
 	// these are used for different wallet interpolation
 	HDPrivateKeyID: [4]byte{0x04, 0x88, 0xad, 0xe4}, // starts with xprv
 	HDPublicKeyID:  [4]byte{0x04, 0x88, 0xb2, 0x1e}, // starts with xpub
-
 	// BIP44 coin type used in the hierarchical deterministic path for
 	// address generation.
 	HDCoinType: 0,
