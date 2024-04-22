@@ -44,7 +44,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		return
 	}
 	ip = locationJson["ip"].(string)
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, ip, serverReady, &confirming, &confirmation, privKey)
+	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey)
 	<-serverReady
 	fmt.Println("Welcome to Orcanet!")
 	fmt.Println("Dive In and Explore! Type 'help' for available commands.")
@@ -182,6 +182,15 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			}
 		case "exit":
 			fmt.Println("Exiting...")
+
+			for _, fileInfo := range orcaStore.GetAllLocalFiles() {
+				filePath := "./files/stored/" + fileInfo.Name
+				err := os.Remove(filePath)
+				if err != nil {
+					fmt.Printf("Error cleaning up stored files: %s\n", err)
+				}
+			}
+
 			return
 		case "getdir":
 			if len(args) == 3 {
