@@ -403,6 +403,26 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 		return err
 	}
 	fmt.Printf("Final Hashed: %s\n", fileKey)
+
+	srcFilePath := fmt.Sprintf("./files/%s", fileName)
+	fileInfo, err := os.Stat(srcFilePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return err
+		} else {
+			return errors.New("File does not exist in files folder.")
+		}
+	}
+
+	if fileInfo.IsDir() {
+		return errors.New("Specified file is a directory.")
+	}
+
+	err = os.Rename(srcFilePath, fmt.Sprintf("./files/stored/%s", fileKey))
+	if err != nil {
+		return err
+	}
+
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}
