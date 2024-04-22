@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"crypto/rsa"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -22,10 +23,11 @@ import (
 	"os"
 	"sync"
 	"time"
-	"errors"
 
 	"google.golang.org/grpc"
 
+	"github.com/go-ping/ping"
+	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
@@ -35,15 +37,13 @@ import (
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
+	ma "github.com/multiformats/go-multiaddr"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type fileShareServerNode struct {
 	fileshare.UnimplementedFileShareServer
-	savedFiles   map[string][]*fileshare.FileDesc // read-only after initialized
-	mu           sync.Mutex                       // protects routeNotes
-	currentCoins float64
 
 	K_DHT   *dht.IpfsDHT
 	PrivKey libp2pcrypto.PrivKey
@@ -53,6 +53,8 @@ type fileShareServerNode struct {
 
 var (
 	serverStruct fileShareServerNode
+	peerTable    map[string]PeerInfo
+	peerTableMUT sync.Mutex
 )
 
 func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool) {
@@ -135,10 +137,138 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	serverStruct.PubKey = pubKey
 	serverStruct.V = validator
 	fileshare.RegisterFileShareServer(s, &serverStruct)
+	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 	serverReady <- true
 	if err := s.Serve(lis); err != nil {
 		panic(err)
+	}
+}
+
+type PeerInfo struct {
+	Location    string `json:"location"`
+	Latency     string `json:"latency"`
+	PeerID      string `json:"peerId"`
+	Connection  string `json:"connection"`
+	OpenStreams string `json:"openStreams"`
+	FlagUrl     string `json:"flagUrl"`
+}
+
+func GetPeerTable() map[string]PeerInfo {
+	return peerTable
+}
+func DisconnectPeer(peerId string) error {
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		val.Connection = "NO"
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return nil
+}
+
+func getLocationFromIP(peerId string) (string, error) {
+	location := ""
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		mAddr, err := ma.NewMultiaddr(val.Connection)
+		if err != nil {
+			return "", errors.New("cannot convert multiaddress to IP")
+		}
+		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
+		if err != nil {
+			return "", nil
+		}
+		client := ipinfo.NewClient(nil)
+		coords, err := client.GetLocation(net.ParseIP(ipStr))
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Location = coords
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return "", errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return location, nil
+}
+
+func getLatency(peerId string) error {
+	peerTableMUT.Lock()
+	if val, ok := peerTable[peerId]; ok {
+		mAddr, err := ma.NewMultiaddr(val.Connection)
+		if err != nil {
+			return errors.New("cannot convert multiaddress to IP")
+		}
+		ipStr, err := mAddr.ValueForProtocol(ma.P_IP4)
+		if err != nil {
+			return nil
+		}
+		pinger, err := ping.NewPinger(ipStr)
+		if err != nil {
+			fmt.Printf("Error creating pinger: %s\n", err)
+			return errors.New("cant create pinger")
+		}
+
+		pinger.Count = 3
+		pinger.Timeout = time.Second * 2
+		pinger.Size = 64
+		pinger.Run()
+		stats := pinger.Statistics()
+		// fmt.Printf("  Packets: Sent = %d, Received = %d, Lost = %d (%.2f%% loss),\n",
+		// 	stats.PacketsSent, stats.PacketsRecv, stats.PacketsSent-stats.PacketsRecv,
+		// 	stats.PacketLoss*100)
+		val.Latency = fmt.Sprint(stats.AvgRtt.Seconds() * 1000)
+		// fmt.Printf("  Minimum = %.2fms, Maximum = %.2fms, Average = %.2fms\n",
+		// 	stats.MinRtt.Seconds()*1000, stats.MaxRtt.Seconds()*1000, stats.AvgRtt.Seconds()*1000)
+		peerTable[peerId] = val
+	} else {
+		peerTableMUT.Unlock()
+		return errors.New("key does not exist")
+	}
+	peerTableMUT.Unlock()
+	return nil
+}
+func UpdateAllPeerLatency() {
+	for peerId := range peerTable {
+		go getLatency(peerId)
+	}
+}
+func ListAllDHTPeers(ctx context.Context, host host.Host) {
+	peerTable = make(map[string]PeerInfo)
+	for {
+		time.Sleep(time.Second * 3)
+		peers := serverStruct.K_DHT.RoutingTable().ListPeers()
+		// Should make a channel that waits for this
+
+		for _, p := range peers {
+			addr, err := serverStruct.K_DHT.FindPeer(ctx, p)
+			if err != nil {
+				fmt.Printf("Error finding peer %s: %s\n", p, err)
+				continue
+			}
+			key := addr.ID.String()
+			if _, ok := peerTable[key]; !ok {
+				connection := ""
+				if len(addr.Addrs) > 0 {
+					connection = addr.Addrs[0].String()
+				}
+				peerTable[key] = PeerInfo{
+					Location:    "",
+					Latency:     "",
+					PeerID:      addr.ID.String(),
+					Connection:  connection,
+					OpenStreams: "YES",
+					FlagUrl:     "",
+				}
+				go getLocationFromIP(key)
+			}
+		}
+		go UpdateAllPeerLatency()
 	}
 }
 
@@ -223,93 +353,19 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func runNotifyStore(client fileshare.FileShareClient, file *fileshare.FileDesc) *fileshare.StorageACKResponse {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ackResponse, err := client.NotifyFileStore(ctx, file)
-	if err != nil {
-		log.Fatalf("client.NotifyFileStorage failed: %v", err)
-	}
-	log.Printf("ACK Response: %v", ackResponse)
-	return ackResponse
-}
-
-func runNotifyUnstore(client fileshare.FileShareClient, file *fileshare.FileDesc) *fileshare.StorageACKResponse {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ackResponse, err := client.NotifyFileUnstore(ctx, file)
-	if err != nil {
-		log.Fatalf("client.NotifyFileStorage failed: %v", err)
-	}
-	log.Printf("ACK Response: %v", ackResponse)
-	return ackResponse
-}
-
-func NotifyStoreWrapper(client fileshare.FileShareClient, file_name_hash string, file_name string, file_size_bytes int64, file_origin_address string, origin_user_id string, file_cost float32, file_data_hash string, file_bytes []byte) {
-	var file_description = fileshare.FileDesc{FileNameHash: file_name_hash,
-		FileName:          file_name,
-		FileSizeBytes:     file_size_bytes,
-		FileOriginAddress: file_origin_address,
-		OriginUserId:      origin_user_id,
-		FileCost:          file_cost,
-		FileDataHash:      file_data_hash,
-		FileBytes:         file_bytes}
-	var ack = runNotifyUnstore(client, &file_description)
-	if ack.IsAcknowledged {
-		fmt.Printf("[Server]: Market acknowledged stopping storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	} else {
-		fmt.Printf("[Server]: Unable to notify market that we are stopping the storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	}
-}
-func NotifyUnstoreWrapper(client fileshare.FileShareClient, file_name_hash string, file_name string, file_size_bytes int64, file_origin_address string, origin_user_id string, file_cost float32, file_data_hash string, file_bytes []byte) {
-	var file_description = fileshare.FileDesc{FileNameHash: file_name_hash,
-		FileName:          file_name,
-		FileSizeBytes:     file_size_bytes,
-		FileOriginAddress: file_origin_address,
-		OriginUserId:      origin_user_id,
-		FileCost:          file_cost,
-		FileDataHash:      file_data_hash,
-		FileBytes:         file_bytes}
-	var ack = runNotifyUnstore(client, &file_description)
-	if ack.IsAcknowledged {
-		fmt.Printf("[Server]: Market acknowledged stopping storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	} else {
-		fmt.Printf("[Server]: Unable to notify market that we are stopping the storage of file %s with hash %s \n", ack.FileName, ack.FileHash)
-	}
-}
-
-func SetupRegisterFile(file_name string, amountPerMB int64, ip string, port int32) error {
-	srcFilePath := fmt.Sprintf("./files/%s", file_name)
-	fileInfo, err := os.Stat(srcFilePath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return err
-		} else {
-			return errors.New("File does not exist in files folder.")
-		}
-	}
-
-	if fileInfo.IsDir() {
-		return errors.New("Specified file is a directory.")
-	}
-
-	hash, err := orcaHash.HashFile(file_name)
+func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip string, port int32) error {
+	fileKey, err := orcaHash.GetFileKey(filePath, fileName)
 	if err != nil {
 		return err
 	}
-
-	err = os.Rename(srcFilePath, fmt.Sprintf("./files/stored/%s", hash))
-	if err != nil {
-		return err
-	}
-	
+	fmt.Printf("Final Hashed: %s\n", fileKey)
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}
 	fileReq.User.Price = amountPerMB
 	fileReq.User.Ip = ip
 	fileReq.User.Port = port
-	fileReq.FileHash = hash
+	fileReq.FileKey = fileKey
 	_, err = serverStruct.RegisterFile(ctx, &fileReq)
 	if err != nil {
 		return err
@@ -330,7 +386,7 @@ func SetupRegisterFile(file_name string, amountPerMB int64, ip string, port int3
  *   An error, if any
  */
 func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
-	hash := in.GetFileHash()
+	hash := in.GetFileKey()
 	pubKeyBytes, err := s.PubKey.Raw()
 	if err != nil {
 		return nil, err
@@ -403,7 +459,7 @@ func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.Re
 	}
 	value = append(value, record...)
 
-	err = s.K_DHT.PutValue(ctx, "orcanet/market/"+in.GetFileHash(), value)
+	err = s.K_DHT.PutValue(ctx, "orcanet/market/"+in.GetFileKey(), value)
 	if err != nil {
 		return nil, err
 	}
@@ -413,7 +469,7 @@ func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.Re
 func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
 	ctx := context.Background()
 	fileReq := fileshare.CheckHoldersRequest{}
-	fileReq.FileHash = fileHash
+	fileReq.FileKey = fileHash
 	holdersResponse, err := serverStruct.CheckHolders(ctx, &fileReq)
 	if err != nil {
 		return nil, err
@@ -433,7 +489,7 @@ func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
  *   An error, if any
  */
 func (s *fileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.CheckHoldersRequest) (*fileshare.HoldersResponse, error) {
-	hash := in.GetFileHash()
+	hash := in.GetFileKey()
 	users := make([]*fileshare.User, 0)
 	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/"+hash)
 	if err != nil {
