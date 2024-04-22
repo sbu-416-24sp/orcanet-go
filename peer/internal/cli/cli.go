@@ -159,7 +159,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 
 		case "list":
 			files := orcaStore.GetAllLocalFiles()
-			fmt.Print("Files found:")
+			fmt.Print("Files found: \n")
 			for _, file := range files {
 				fmt.Println(file.Name)
 			}
