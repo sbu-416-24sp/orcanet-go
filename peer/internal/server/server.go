@@ -116,7 +116,7 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, ip string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
@@ -134,7 +134,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/remove-peer", removePeer)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
+	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, ip, httpPort)
 	http.ListenAndServe(":"+httpPort, nil)
 }
 

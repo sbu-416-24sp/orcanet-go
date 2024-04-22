@@ -18,8 +18,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
+	orcaStore "orca-peer/internal/store"
 	"os"
 	"sync"
 	"time"
@@ -58,7 +60,7 @@ var (
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool) {
+func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, ip string, httpPort string) {
 	ctx := context.Background()
 
 	//Get libp2p wrapped privKey
@@ -140,7 +142,48 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	fileshare.RegisterFileShareServer(s, &serverStruct)
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
-	serverReady <- true
+	files := orcaStore.GetAllLocalFiles()
+	reader := bufio.NewReader(os.Stdin)
+	for _, file := range files {
+		for {
+			if !file.IsDir {
+				fmt.Printf("Enter price for hosted file, %s\n", file.Name)
+				fmt.Print("> ")
+				text, err := reader.ReadString('\n')
+				if err != nil {
+					fmt.Fprintln(os.Stderr, "Error reading from stdin:", err)
+					continue
+				}
+
+				text = strings.TrimSpace(text)
+				parts := strings.Fields(text)
+				if len(parts) == 0 {
+					continue
+				}
+
+				price, err := strconv.ParseInt(parts[0], 10, 64)
+				if(err != nil){
+					fmt.Println("Error reading price, try again")
+					continue
+				}
+
+				fmt.Printf("Registering %s on the market for %d\n", file.Name, price)
+				httpPortInt, err := strconv.ParseInt(httpPort, 10, 32)
+				if err != nil {
+					fmt.Printf("Error reading port, please try again")
+					continue
+				}
+				httpPortInt32 := int32(httpPortInt)
+				err = SetupRegisterFile("./files/stored/" + file.Hash + " " + file.Name, file.Hash + " " + file.Name, price, ip, httpPortInt32)
+				if err != nil {
+					fmt.Printf("Error registering file %s, %s\n", file.Name, err)
+				}
+				break 
+			}
+		}
+	}
+
+	serverReady <- true	
 	if err := s.Serve(lis); err != nil {
 		panic(err)
 	}
