@@ -27,7 +27,7 @@ func GetAllLocalFiles() []FileInfo {
 	for _, file := range files {
 		fileInfo, err := os.Stat("files/stored/" + file.Name())
 		if err == nil{
-			if len(file.Name() >= 64) {
+			if len(file.Name()) >= 64 {
 				fileNames = append(fileNames, 
 					FileInfo{IsDir: fileInfo.IsDir(), 
 						ModTime: fileInfo.ModTime(), 
