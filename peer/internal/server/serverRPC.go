@@ -388,7 +388,7 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 	}
 	defer destFile.Close()
 
-	_, err = io.Copy(srcFile, destFile)
+	_, err = io.Copy(destFile, srcFile)
 	if err != nil {
 		return err
 	}
