@@ -167,14 +167,14 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 					continue
 				}
 
-				fmt.Printf("Registering %s on the market for %d\n", file.Name, price)
+				fmt.Printf("Registering %s on the market for %d OrcaCoins\n", file.Name, price)
 				httpPortInt, err := strconv.ParseInt(httpPort, 10, 32)
 				if err != nil {
 					fmt.Printf("Error reading port, please try again")
 					continue
 				}
 				httpPortInt32 := int32(httpPortInt)
-				err = SetupRegisterFile("./files/stored/" + file.Hash + " " + file.Name, file.Hash + " " + file.Name, price, ip, httpPortInt32)
+				err = SetupRegisterFile("./files/stored/" + file.Name, file.Name, price, ip, httpPortInt32)
 				if err != nil {
 					fmt.Printf("Error registering file %s, %s\n", file.Name, err)
 				}

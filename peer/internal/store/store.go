@@ -4,7 +4,6 @@ import (
 	"log"
 	"os"
 	"time"
-	"strings"
 )
 
 type FileInfo struct {
@@ -12,7 +11,6 @@ type FileInfo struct {
 	ModTime time.Time
 	Name    string
 	Size    int64
-	Hash    string
 }
 
 //Searches for files in stored. 
@@ -31,9 +29,8 @@ func GetAllLocalFiles() []FileInfo {
 				fileNames = append(fileNames, 
 					FileInfo{IsDir: fileInfo.IsDir(), 
 						ModTime: fileInfo.ModTime(), 
-						Name: strings.TrimSpace(fileInfo.Name()[64:]), 
-						Size: fileInfo.Size(), 
-						Hash: fileInfo.Name()[0:64]})
+						Name: fileInfo.Name(), 
+						Size: fileInfo.Size()})
 			}
 		}
 	}
