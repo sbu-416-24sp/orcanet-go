@@ -488,4 +488,5 @@ func InitServer() {
 	http.HandleFunc("/writeFile", writeFile)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
+	http.HandleFunc("/job-peer", JobPeerHandler)
 }

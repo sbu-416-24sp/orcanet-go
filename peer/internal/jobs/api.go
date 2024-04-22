@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	orcaServer "orca-peer/internal/server"
-
 	"github.com/google/uuid"
 )
 
@@ -29,21 +27,21 @@ type JobManager struct {
 	Changed bool
 }
 
-var manager JobManager
+var Manager JobManager
 
 func InitPeriodicJobSave() {
-	manager = JobManager{
+	Manager = JobManager{
 		Jobs:    make([]Job, 0), // Initialize an empty slice of jobs
 		Mutex:   sync.Mutex{},   // Initialize a mutex
 		Changed: false,
 	}
 	for {
 		time.Sleep(10 * time.Second)
-		manager.Mutex.Lock()
-		if manager.Changed {
-			SaveHistory(manager.Jobs)
+		Manager.Mutex.Lock()
+		if Manager.Changed {
+			SaveHistory(Manager.Jobs)
 		}
-		manager.Mutex.Unlock()
+		Manager.Mutex.Unlock()
 	}
 }
 func writeStatusUpdate(w http.ResponseWriter, message string) {
@@ -170,69 +168,6 @@ func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-type JobPeerReqPayload struct {
-	FileHash string `json:"fileHash"`
-	PeerId   string `json:"peer"`
-}
-
-type JobPeerResPayload struct {
-	IpAddress         string `json:"ipAddress"`
-	Region            string `json:"region"`
-	Liked             bool   `json:"liked"`
-	Status            string `json:"status"`
-	AccumulatedMemory string `json:"accumulatedMemory"`
-	Price             string `json:"price"`
-}
-
-func JobPeerHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
-		queryParams := r.URL.Query()
-		filehash := queryParams.Get("fileHash")
-		peerId := queryParams.Get("peer")
-		peers := orcaServer.GetPeerTable()
-		if val, ok := peers[peerId]; ok {
-			var currJob Job
-			found := false
-			for _, job := range manager.Jobs {
-				if job.FileHash == filehash {
-					currJob = job
-					found = true
-					break
-				}
-			}
-			if !found {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Unable to find a job with specified job id")
-				return
-			}
-			peerOnJob := JobPeerResPayload{
-				IpAddress:         val.Connection,
-				Region:            val.Location,
-				Liked:             false,
-				Status:            currJob.Status,
-				AccumulatedMemory: fmt.Sprint(currJob.AccumulatedCost),
-				Price:             fmt.Sprint(currJob.ProjectedCost),
-			}
-			jsonData, err := json.Marshal(peerOnJob)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Failed to convert JSON Data into a string")
-				return
-			}
-			w.Header().Set("Content-Type", "application/octet-stream")
-			w.WriteHeader(http.StatusOK)
-			w.Write(jsonData)
-		} else {
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Peer with specified ID does not exist")
-		}
-		w.WriteHeader(http.StatusOK)
-		writeStatusUpdate(w, "Successfully added job.")
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only PATCH requests will be handled.")
-	}
-}
 func StartJobsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPatch {
 		var jobIds []JobInfoReqPayload

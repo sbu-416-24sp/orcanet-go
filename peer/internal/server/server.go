@@ -9,8 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	api "orca-peer/internal/api"
 	"orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"os"
 	"path/filepath"
 	"time"
@@ -121,7 +121,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
-	api.InitServer()
+	orcaJobs.InitJobRoutes()
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
