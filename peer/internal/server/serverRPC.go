@@ -21,9 +21,9 @@ import (
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
 	"os"
+	"strings"
 	"sync"
 	"time"
-	"strings"
 
 	"google.golang.org/grpc"
 
@@ -141,7 +141,7 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 
-	serverReady <- true	
+	serverReady <- true
 	if err := s.Serve(lis); err != nil {
 		panic(err)
 	}
@@ -162,7 +162,7 @@ func GetPeerTable() map[string]PeerInfo {
 func DisconnectPeer(peerId string) error {
 	peerTableMUT.Lock()
 	if val, ok := peerTable[peerId]; ok {
-		val.Connection = "NO"
+		val.OpenStreams = "NO"
 		peerTable[peerId] = val
 	} else {
 		peerTableMUT.Unlock()
