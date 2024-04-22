@@ -16,6 +16,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"net/http"
+	"io"
 )
 
 var (
@@ -252,4 +254,53 @@ func getPort(useCase string) string {
 
 		fmt.Print("Invalid port. Please enter a different port: ")
 	}
+}
+
+// detectNAT simulates the process of detecting whether the node is behind NAT.
+func detectNAT() bool {
+	ipapiClient := http.Client{}
+
+	ipv4Req, err := http.NewRequest("GET", "http://httpbin.org/ip", nil)
+	if err != nil {
+		fmt.Println("Error creating IPv4 request:", err)
+		os.Exit(1)
+	}
+	resp, err := ipapiClient.Do(ipv4Req)
+	if err != nil {
+		fmt.Println("Error retrieving IPv4:", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading IPv4 response body:", err)
+		os.Exit(1)
+	}
+
+	var ipv4JSON struct {
+		Origin string `json:"origin"`
+	}
+	err = json.Unmarshal(body, &ipv4JSON)
+	if err != nil {
+		fmt.Println("Error unmarshalling IPv4 response body:", err)
+		os.Exit(1)
+	}
+
+	publicIP := net.ParseIP(ipv4JSON.Origin)
+
+	// Define private IP address ranges.
+	privateRanges := []*net.IPNet{
+		{IP: net.IPv4(10, 0, 0, 0), Mask: net.CIDRMask(8, 32)},
+		{IP: net.IPv4(172, 16, 0, 0), Mask: net.CIDRMask(12, 32)},
+		{IP: net.IPv4(192, 168, 0, 0), Mask: net.CIDRMask(16, 32)},
+	}
+
+	// Check if the public IP address is within any of the private IP address ranges.
+	for _, pr := range privateRanges {
+		if pr.Contains(publicIP) {
+			return false
+		}
+	}
+	return true
 }
