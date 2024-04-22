@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"time"
+	"strings"
 )
 
 type FileInfo struct {
@@ -26,12 +27,14 @@ func GetAllLocalFiles() []FileInfo {
 	for _, file := range files {
 		fileInfo, err := os.Stat("files/stored/" + file.Name())
 		if err == nil{
-			fileNames = append(fileNames, 
-				FileInfo{IsDir: fileInfo.IsDir(), 
-					ModTime: fileInfo.ModTime(), 
-					Name: fileInfo.Name()[65:], 
-					Size: fileInfo.Size(), 
-					Hash: fileInfo.Name()[0:64]})
+			if len(file.Name() >= 64) {
+				fileNames = append(fileNames, 
+					FileInfo{IsDir: fileInfo.IsDir(), 
+						ModTime: fileInfo.ModTime(), 
+						Name: strings.TrimSpace(fileInfo.Name()[64:]), 
+						Size: fileInfo.Size(), 
+						Hash: fileInfo.Name()[0:64]})
+			}
 		}
 	}
 	return fileNames
