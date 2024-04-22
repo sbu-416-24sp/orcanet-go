@@ -7,6 +7,8 @@ import (
 	"sync"
 	"time"
 
+	orcaServer "orca-peer/internal/server"
+
 	"github.com/google/uuid"
 )
 
@@ -174,7 +176,7 @@ type JobPeerReqPayload struct {
 }
 
 type JobPeerResPayload struct {
-	JobId             string `json:"ipAddress"`
+	IpAddress         string `json:"ipAddress"`
 	Region            string `json:"region"`
 	Liked             bool   `json:"liked"`
 	Status            string `json:"status"`
@@ -182,8 +184,54 @@ type JobPeerResPayload struct {
 	Price             string `json:"price"`
 }
 
-func JobPeerHandler() {
-
+func JobPeerHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		queryParams := r.URL.Query()
+		filehash := queryParams.Get("fileHash")
+		peerId := queryParams.Get("peer")
+		peers := orcaServer.GetPeerTable()
+		if val, ok := peers[peerId]; ok {
+			var currJob Job
+			found := false
+			for _, job := range manager.Jobs {
+				if job.FileHash == filehash {
+					currJob = job
+					found = true
+					break
+				}
+			}
+			if !found {
+				w.WriteHeader(http.StatusBadRequest)
+				writeStatusUpdate(w, "Unable to find a job with specified job id")
+				return
+			}
+			peerOnJob := JobPeerResPayload{
+				IpAddress:         val.Connection,
+				Region:            val.Location,
+				Liked:             false,
+				Status:            currJob.Status,
+				AccumulatedMemory: fmt.Sprint(currJob.AccumulatedCost),
+				Price:             fmt.Sprint(currJob.ProjectedCost),
+			}
+			jsonData, err := json.Marshal(peerOnJob)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			w.WriteHeader(http.StatusOK)
+			w.Write(jsonData)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Peer with specified ID does not exist")
+		}
+		w.WriteHeader(http.StatusOK)
+		writeStatusUpdate(w, "Successfully added job.")
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PATCH requests will be handled.")
+	}
 }
 func StartJobsHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPatch {
