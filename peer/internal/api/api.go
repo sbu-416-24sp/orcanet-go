@@ -62,7 +62,7 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashes := orcaFileInfo.ChunkHashes
-	fmt.Println(orcaFileInfo)
+	fmt.Println(storedFileInfoMap)
 	fmt.Println(hashes)
 	if chunkIndexInt >= len(hashes) {
 		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
