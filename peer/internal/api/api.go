@@ -3,22 +3,21 @@ package api
 import (
 	"crypto/rsa"
 	"crypto/sha256"
+	"strings"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	orcaHash "orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
+	orcaMining "orca-peer/internal/mining"
+	"orca-peer/internal/server"
 	"orca-peer/internal/fileshare"
 	"os"
 	"strconv"
 	"path/filepath"
 )
-
-type GetFileJSONBody struct {
-	Filename string `json:"filename"`
-	Hash     string `json:"hash"`
-}
 
 type UploadFileJSONBody struct {
 	Filepath string `json:"filepath"`
@@ -30,6 +29,13 @@ var peers *PeerStorage
 var publicKey *rsa.PublicKey
 var privateKey *rsa.PrivateKey
 var storedFileInfoMap map[string]fileshare.FileInfo
+
+type GetFileJSONResponseBody struct {
+	Filename    string   `json:"name"`
+	Size        int      `json:"size"`
+	NumberPeers int      `json:"numberOfPeers"`
+	Producers   []string `json:"listProducers"`
+}
 
 func getFile(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
@@ -76,9 +82,53 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("X-Chunks-Length", fmt.Sprintf("%d", len(hashes)))
 		http.ServeFile(w, r, fileaddress)
 
+		} else if os.IsNotExist(err) {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "File hash does not exist in directory.")
+			return
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Error arose checking for file.")
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		writeStatusUpdate(w, "Successfully removed file.")
+		return
+	} else if r.Method == http.MethodGet {
+		path := r.URL.Path
+		parts := strings.Split(path, "/")
+		if len(parts) != 4 || parts[3] != "info" {
+			http.NotFound(w, r)
+			return
+		}
+		hash := parts[2]
+		holders, err := server.SetupCheckHolders(hash)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Unable to find holders of this file.")
+		}
+		peers := make([]string, 0)
+		for _, holder := range holders.Holders {
+			peers = append(peers, holder.Ip)
+		}
+		responseBody := GetFileJSONResponseBody{
+			Filename:    hash,
+			Size:        0,
+			NumberPeers: len(peers),
+			Producers:   peers,
+		}
+		jsonData, err := json.Marshal(responseBody)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
 	} else {
-		w.WriteHeader(http.StatusInternalServerError)
-		writeStatusUpdate(w, "Cannot find specified file inside files directory")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only DELETE requests will be handled.")
 		return
 	}
 }
@@ -218,9 +268,6 @@ type HashResponse struct {
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		// fileData := payload.fileData
-		// sourceFile, err := os.Open(payload.Filepath)
-		// Get the file from the form data
 		sourceFile, handler, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, "Unable to get file from form", http.StatusBadRequest)
@@ -233,12 +280,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		defer sourceFile.Close()
 		hash := sha256.Sum256(fileContent)
-
-		// Encode the hash as a hexadecimal string
 		hexHash := hex.EncodeToString(hash[:])
-
-		// Create the destination file in the destination folder
-		destinationFilePath := "files/" + hexHash
+		destinationFilePath := "./files/" + hexHash
 		destinationFile, err := os.Create(destinationFilePath)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -246,14 +289,11 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer destinationFile.Close()
-
-		// Reset the read cursor back to the beginning of the file
 		_, err = sourceFile.Seek(0, 0)
 		if err != nil {
 			http.Error(w, "Unable to reset file read cursor", http.StatusInternalServerError)
 			return
 		}
-
 		_, err = io.Copy(destinationFile, sourceFile)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -272,64 +312,6 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		w.Write(jsonResponse)
 		return
 	}
-}
-func deleteFile(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodDelete {
-
-		contentType := r.Header.Get("Content-Type")
-		switch contentType {
-		case "application/json":
-			// For JSON content type, decode the JSON into a struct
-			var payload GetFileJSONBody
-			decoder := json.NewDecoder(r.Body)
-			if err := decoder.Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
-				return
-			}
-			if payload.Filename == "" && payload.Hash == "" {
-
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Missing Filename and CID values inside of the payload.")
-				return
-			}
-			fileDir := "./files/"
-			filePath := "./files/" + payload.Hash
-
-			// Check if the file exists in the "stored" directory
-			storedFilePath := filepath.Join(fileDir, "stored", payload.Hash)
-			if _, err := os.Stat(storedFilePath); err == nil {
-				//		filePath = storedFilePath
-			}
-			// Check if the file exists in the "requested" directory
-			requestedFilePath := filepath.Join(fileDir, "requested", payload.Hash)
-			if _, err := os.Stat(requestedFilePath); err == nil {
-				filePath = requestedFilePath
-			}
-			fmt.Println("filePath: ", filePath)
-			// Attempt to delete the file
-			err := os.Remove(filePath)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Error removing file from local directory.")
-				return
-			}
-
-			fmt.Println("File deleted successfully.")
-			return
-
-		default:
-			w.WriteHeader(http.StatusBadRequest)
-			writeStatusUpdate(w, "Request must have the content header set as application/json")
-			return
-		}
-	} else {
-		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only DELETE requests will be handled.")
-
-		return
-	}
-
 }
 func joinStrings(strings []string, delimiter string) string {
 	if len(strings) == 0 {
@@ -495,13 +477,15 @@ func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
 	storedFileInfoMap = *fileInfoMap
 	backend = NewBackend()
 	peers = NewPeerStorage()
+	fmt.Println("Settig up API Routes")
 	publicKey, privateKey = orcaHash.LoadInKeys()
-	http.HandleFunc("/get-file", getFile)
+	orcaJobs.InitJobRoutes()
+	orcaMining.InitDeviceTracker()
+	http.HandleFunc("/file/", handleFileRoute)
+	http.HandleFunc("/upload", uploadFile)
+
 	http.HandleFunc("/getAllStored", getAllStored)
 	http.HandleFunc("/get-file-info", getFileInfo)
-	http.HandleFunc("/upload-file", uploadFile)
-	http.HandleFunc("/delete-file", deleteFile)
-
 	http.HandleFunc("/updateActivityName", updateActivityName)
 	http.HandleFunc("/removeActivity", removeActivity)
 	http.HandleFunc("/setActivity", setActivity)
@@ -509,5 +493,7 @@ func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
 	http.HandleFunc("/writeFile", writeFile)
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
-
+	http.HandleFunc("/job-peer", JobPeerHandler)
+	http.HandleFunc("/device", orcaMining.PutDeviceHandler)
+	http.HandleFunc("/device_list", orcaMining.PutDeviceHandler)
 }

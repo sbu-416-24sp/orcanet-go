@@ -104,3 +104,19 @@ func appDataDir(goos, appName string, roaming bool) string {
 func AppDataDir(appName string, roaming bool) string {
 	return appDataDir(runtime.GOOS, appName, roaming)
 }
+
+// returns the path to the directory in which btcd is located
+// requirement: GOPATH needs to be initialized as a path variable
+func BtcdDir() string {
+	goPath := os.Getenv("GOPATH")
+	// CHANGE: might have to change depending on where it is located
+	return filepath.Join(goPath, "src/orcacointest")
+}
+
+// returns the path to the directory in which btcwallet is located
+// requirement: GOPATH needs to be initialized as a path variable
+func BtcWalletDir() string {
+	goPath := os.Getenv("GOPATH")
+	// CHANGE: might have to change depending on where it is located
+	return filepath.Join(goPath, "OrcaWallet")
+}

@@ -9,8 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
-	api "orca-peer/internal/api"
 	"orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"orca-peer/internal/fileshare"
 	"os"
 	"path/filepath"
@@ -117,11 +117,12 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey, startAPIRoutes func()) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
+	go orcaJobs.InitPeriodicJobSave()
 
 	fileShareServer := FileShareServerNode{
 		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
@@ -131,6 +132,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
+	startAPIRoutes()
 	http.HandleFunc("/storeFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.storeFile(w, r, confirming, confirmation)
 	})
