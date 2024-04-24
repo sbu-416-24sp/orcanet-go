@@ -3,14 +3,15 @@ package api
 import (
 	"crypto/rsa"
 	"crypto/sha256"
-
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	orcaHash "orca-peer/internal/hash"
+	"orca-peer/internal/fileshare"
 	"os"
+	"strconv"
 	"path/filepath"
 )
 
@@ -28,11 +29,13 @@ var backend *Backend
 var peers *PeerStorage
 var publicKey *rsa.PublicKey
 var privateKey *rsa.PrivateKey
+var storedFileInfoMap map[string]fileshare.FileInfo
 
 func getFile(w http.ResponseWriter, r *http.Request) {
 	// Parse query parameters
 	queryParams := r.URL.Query()
 	hash := queryParams.Get("hash")
+	chunkIndex := queryParams.Get("chunk-index")
 
 	// Check if the "hash" parameter is present
 	if hash == "" {
@@ -42,17 +45,36 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("hash:", hash)
 	fileaddress := ""
 
-	if _, err := os.Stat("files/stored/" + hash); !os.IsNotExist(err) {
-		fileaddress = "files/stored/" + hash
+	if chunkIndex == "" {
+		http.Error(w, "Missing 'chunkIndex' parameter", http.StatusBadRequest)
+		return
 	}
-	if _, err := os.Stat("files/requested/" + hash); !os.IsNotExist(err) && fileaddress == "" {
-		fileaddress = "files/requested/" + hash
+	fmt.Println("chunk:", chunkIndex)
+	chunkIndexInt, err := strconv.Atoi(chunkIndex)
+	if err != nil{
+		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
+		return
 	}
-	if _, err := os.Stat("files/" + hash); !os.IsNotExist(err) && fileaddress == "" {
-		fileaddress = "files/" + hash
+	fileaddress = ""
+
+	orcaFileInfo, ok := storedFileInfoMap[hash]
+	if !ok {
+		http.Error(w, "Specified hash is not in orcastore fileshare server node list", http.StatusBadRequest)
 	}
+
+	hashes := orcaFileInfo.ChunkHashes
+	if chunkIndexInt >= len(hashes) {
+		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := os.Stat("files/stored/" + hashes[chunkIndexInt]); !os.IsNotExist(err) {
+		fileaddress = "files/stored/" + hashes[chunkIndexInt]
+	}
+
 	if fileaddress != "" {
 		fmt.Println("File address:", fileaddress)
+		w.Header().Set("X-Chunks-Length", fmt.Sprintf("%d", len(hashes)))
 		http.ServeFile(w, r, fileaddress)
 
 	} else {
@@ -470,7 +492,8 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func InitServer() {
+func InitServer(storedFileInfoMap map[string]fileshare.FileInfo) {
+	storedFileInfoMap = storedFileInfoMap
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()

@@ -14,8 +14,6 @@ type FileInfo struct {
 }
 
 //Searches for files in stored. 
-//Format of name in stored should be '64-char-sha256-hash [nickname]'
-//File name will just be nick name instead of hash + nickname
 func GetAllLocalFiles() []FileInfo {
 	files, err := os.ReadDir("files/stored")
 	if err != nil {

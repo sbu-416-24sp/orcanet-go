@@ -101,7 +101,10 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
+				err = client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
+				if err != nil {
+					fmt.Printf("Error getting file %s", err)
+				}
 			} else {
 				fmt.Println("Usage: get [fileHash]")
 			}

@@ -24,9 +24,7 @@ import (
 	"sync"
 	"time"
 	"strings"
-
 	"google.golang.org/grpc"
-
 	"github.com/go-ping/ping"
 	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
@@ -43,22 +41,22 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type fileShareServerNode struct {
+type FileShareServerNode struct {
 	fileshare.UnimplementedFileShareServer
-
 	K_DHT   *dht.IpfsDHT
 	PrivKey libp2pcrypto.PrivKey
 	PubKey  libp2pcrypto.PubKey
 	V       record.Validator
+	StoredFileInfoMap map[string]fileshare.FileInfo //This is the list of files we are storing
 }
 
 var (
-	serverStruct fileShareServerNode
+	serverStruct FileShareServerNode
 	peerTable    map[string]PeerInfo
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool) {
+func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, serverStruct *FileShareServerNode){
 	ctx := context.Background()
 
 	//Get libp2p wrapped privKey
@@ -132,12 +130,12 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	}
 
 	s := grpc.NewServer()
-	serverStruct = fileShareServerNode{}
 	serverStruct.K_DHT = kDHT
 	serverStruct.PrivKey = privKey
 	serverStruct.PubKey = pubKey
 	serverStruct.V = validator
-	fileshare.RegisterFileShareServer(s, &serverStruct)
+	serverStruct.StoredFileInfoMap = make(map[string]fileshare.FileInfo)
+	fileshare.RegisterFileShareServer(s, serverStruct)
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 
@@ -356,14 +354,8 @@ func sendFileToConsumer(w http.ResponseWriter, r *http.Request) {
 }
 
 func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip string, port int32) error {
-	fileKey, err := orcaHash.GetFileKey(filePath, fileName)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Final Hashed: %s\n", fileKey)
-
 	srcFilePath := fmt.Sprintf("./files/%s", fileName)
-	fileInfo, err := os.Stat(srcFilePath)
+	osFileInfo, err := os.Stat(srcFilePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return err
@@ -372,31 +364,16 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 		}
 	}
 
-	if fileInfo.IsDir() {
+	if osFileInfo.IsDir() {
 		return errors.New("Specified file is a directory.")
 	}
 
-	srcFile, err := os.Open(srcFilePath)
+	fileKey, orcaFileInfo, err := orcaHash.SaveChunkedFile(filePath, fileName)
 	if err != nil {
 		return err
 	}
-	defer srcFile.Close()
-
-	destFile, err := os.Create("./files/stored/" + fileKey)
-	if err != nil {
-		return err
-	}
-	defer destFile.Close()
-
-	_, err = io.Copy(destFile, srcFile)
-	if err != nil {
-		return err
-	}
-
-	err = destFile.Sync()
-	if err != nil {
-		return err
-	}
+	serverStruct.StoredFileInfoMap[fileKey] = orcaFileInfo
+	fmt.Printf("Final Hashed: %s\n", fileKey)
 
 	ctx := context.Background()
 	fileReq := fileshare.RegisterFileRequest{}
@@ -424,7 +401,7 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
  *   An empty protobuf struct
  *   An error, if any
  */
-func (s *fileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
+func (s *FileShareServerNode) RegisterFile(ctx context.Context, in *fileshare.RegisterFileRequest) (*emptypb.Empty, error) {
 	hash := in.GetFileKey()
 	pubKeyBytes, err := s.PubKey.Raw()
 	if err != nil {
@@ -527,7 +504,7 @@ func SetupCheckHolders(fileHash string) (*fileshare.HoldersResponse, error) {
  *   A HoldersResponse protobuf struct that represents the producers and their prices.
  *   An error, if any
  */
-func (s *fileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.CheckHoldersRequest) (*fileshare.HoldersResponse, error) {
+func (s *FileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.CheckHoldersRequest) (*fileshare.HoldersResponse, error) {
 	hash := in.GetFileKey()
 	users := make([]*fileshare.User, 0)
 	value, err := s.K_DHT.GetValue(ctx, "orcanet/market/"+hash)
