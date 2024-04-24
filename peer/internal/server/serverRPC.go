@@ -56,7 +56,7 @@ var (
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, serverStruct *FileShareServerNode){
+func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode){
 	ctx := context.Background()
 
 	//Get libp2p wrapped privKey
@@ -130,16 +130,17 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	}
 
 	s := grpc.NewServer()
-	serverStruct.K_DHT = kDHT
-	serverStruct.PrivKey = privKey
-	serverStruct.PubKey = pubKey
-	serverStruct.V = validator
-	serverStruct.StoredFileInfoMap = make(map[string]fileshare.FileInfo)
-	fileshare.RegisterFileShareServer(s, serverStruct)
-	//go ListAllDHTPeers(ctx, host)
+	fileShareServer.K_DHT = kDHT
+	fileShareServer.PrivKey = privKey
+	fileShareServer.PubKey = pubKey
+	fileShareServer.V = validator
+	fileShareServer.StoredFileInfoMap = make(map[string]fileshare.FileInfo)
+	fileshare.RegisterFileShareServer(s, fileShareServer)
+	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 
 	serverReady <- true	
+	serverStruct = *fileShareServer
 	if err := s.Serve(lis); err != nil {
 		panic(err)
 	}
