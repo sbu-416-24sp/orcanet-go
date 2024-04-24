@@ -47,6 +47,10 @@ func InitDeviceTracker() {
 	}
 }
 
+func PutDevice() {
+
+}
+
 func LoadHistory() ([]Device, error) {
 	fileData, err := os.ReadFile("./internal/mining/devices.json")
 	if err != nil {

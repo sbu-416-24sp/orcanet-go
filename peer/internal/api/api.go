@@ -12,6 +12,7 @@ import (
 	"net/http"
 	orcaHash "orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
+	orcaMining "orca-peer/internal/mining"
 	"orca-peer/internal/server"
 	"os"
 	"path/filepath"
@@ -238,9 +239,6 @@ type HashResponse struct {
 
 func uploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		// fileData := payload.fileData
-		// sourceFile, err := os.Open(payload.Filepath)
-		// Get the file from the form data
 		sourceFile, handler, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, "Unable to get file from form", http.StatusBadRequest)
@@ -253,12 +251,8 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 		}
 		defer sourceFile.Close()
 		hash := sha256.Sum256(fileContent)
-
-		// Encode the hash as a hexadecimal string
 		hexHash := hex.EncodeToString(hash[:])
-
-		// Create the destination file in the destination folder
-		destinationFilePath := "files/" + hexHash
+		destinationFilePath := "./files/" + hexHash
 		destinationFile, err := os.Create(destinationFilePath)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -266,14 +260,11 @@ func uploadFile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		defer destinationFile.Close()
-
-		// Reset the read cursor back to the beginning of the file
 		_, err = sourceFile.Seek(0, 0)
 		if err != nil {
 			http.Error(w, "Unable to reset file read cursor", http.StatusInternalServerError)
 			return
 		}
-
 		_, err = io.Copy(destinationFile, sourceFile)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -459,6 +450,7 @@ func InitAPIServer() {
 	fmt.Println("Settig up API Routes")
 	publicKey, privateKey = orcaHash.LoadInKeys()
 	orcaJobs.InitJobRoutes()
+	orcaMining.InitDeviceTracker()
 	http.HandleFunc("/file/", handleFileRoute)
 	http.HandleFunc("/upload", uploadFile)
 
@@ -472,4 +464,6 @@ func InitAPIServer() {
 	http.HandleFunc("/sendMoney", sendMoney)
 	http.HandleFunc("/getLocation", getLocation)
 	http.HandleFunc("/job-peer", JobPeerHandler)
+	http.HandleFunc("/device", orcaMining.PutDeviceHandler)
+	http.HandleFunc("/device_list", orcaMining.PutDeviceHandler)
 }
