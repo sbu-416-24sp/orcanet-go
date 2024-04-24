@@ -134,7 +134,6 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	fileShareServer.PrivKey = privKey
 	fileShareServer.PubKey = pubKey
 	fileShareServer.V = validator
-	fileShareServer.StoredFileInfoMap = make(map[string]fileshare.FileInfo)
 	fileshare.RegisterFileShareServer(s, fileShareServer)
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())

@@ -62,8 +62,6 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hashes := orcaFileInfo.ChunkHashes
-	fmt.Println(storedFileInfoMap)
-	fmt.Println(hashes)
 	if chunkIndexInt >= len(hashes) {
 		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
 		return
@@ -493,8 +491,8 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func InitServer(fileInfoMap map[string]fileshare.FileInfo) {
-	storedFileInfoMap = fileInfoMap
+func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
+	storedFileInfoMap = *fileInfoMap
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()
