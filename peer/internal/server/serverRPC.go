@@ -195,7 +195,6 @@ func getLocationFromIP(peerId string) (string, error) {
 			log.Fatal(err)
 		}
 		val.Location = record.Country.Names["en"]
-		fmt.Println(val.Location)
 		peerTable[peerId] = val
 	} else {
 		peerTableMUT.Unlock()
