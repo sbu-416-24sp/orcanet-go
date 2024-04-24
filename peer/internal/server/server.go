@@ -116,16 +116,16 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey, startAPIRoutes func()) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
-	orcaJobs.InitJobRoutes()
 	go orcaJobs.InitPeriodicJobSave()
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
+	startAPIRoutes()
 	http.HandleFunc("/storeFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.storeFile(w, r, confirming, confirmation)
 	})
