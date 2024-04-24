@@ -299,7 +299,7 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 
 //int return value will be the length of chunk indexes from response header
 func (client *Client) getChunkData(ip string, port int32, file_hash string, chunk int) (int, []byte, error) {
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk=0", ip, port, file_hash))
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk-index=0", ip, port, file_hash))
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		return -1, nil, err
@@ -313,7 +313,7 @@ func (client *Client) getChunkData(ip string, port int32, file_hash string, chun
 			return -1, nil, err
 		}
 		fmt.Printf("\nError: %s\n ", body)
-		return -1, nil, errors.New("http status not ok")
+		return -1, nil, errors.New("http status not ok\n")
 	}
 
 	data := bytes.NewBuffer([]byte{})

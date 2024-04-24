@@ -92,7 +92,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				for _, holder := range holders.Holders {
 					if bestHolder == nil {
 						bestHolder = holder
-					} else if bestHolder.Price < holder.Price {
+					} else if holder.GetPrice() < bestHolder.GetPrice() {
 						bestHolder = holder
 					}
 				}

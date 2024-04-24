@@ -46,7 +46,7 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	fileaddress := ""
 
 	if chunkIndex == "" {
-		http.Error(w, "Missing 'chunkIndex' parameter", http.StatusBadRequest)
+		http.Error(w, "Missing 'chunk-index' parameter", http.StatusBadRequest)
 		return
 	}
 	fmt.Println("chunk:", chunkIndex)
@@ -492,8 +492,8 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func InitServer(storedFileInfoMap map[string]fileshare.FileInfo) {
-	storedFileInfoMap = storedFileInfoMap
+func InitServer(fileInfoMap map[string]fileshare.FileInfo) {
+	storedFileInfoMap = fileInfoMap
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	publicKey, privateKey = orcaHash.LoadInKeys()
