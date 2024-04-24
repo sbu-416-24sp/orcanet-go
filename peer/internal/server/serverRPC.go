@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/go-ping/ping"
-	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
@@ -39,6 +38,7 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
@@ -184,12 +184,18 @@ func getLocationFromIP(peerId string) (string, error) {
 		if err != nil || strings.Contains(ipStr, "127.0.0.1") {
 			return "", nil
 		}
-		client := ipinfo.NewClient(nil)
-		coords, err := client.GetLocation(net.ParseIP(ipStr))
+		ip := net.ParseIP(ipStr)
+
+		db, err := geoip2.Open("./rsrc/GeoLite2-Country.mmdb")
 		if err != nil {
 			log.Fatal(err)
 		}
-		val.Location = coords
+		record, err := db.Country(ip)
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Location = record.Country.Names["en"]
+		fmt.Println(val.Location)
 		peerTable[peerId] = val
 	} else {
 		peerTableMUT.Unlock()
