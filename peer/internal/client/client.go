@@ -11,6 +11,7 @@ import (
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
 	"os"
+	"strconv"
 	"path/filepath"
 )
 
@@ -106,46 +107,35 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error
 			return
 		}
 	*/
-	data, err := client.getData(ip, port, file_hash)
-	if err != nil {
-		return err
-	}
-	// resp, err := http.Get(fmt.Sprintf("http://%s:%s/requestFile/%s", ip, port, filename))
-	// if err != nil {
-	// 	return err
-	// }
-
-	// fmt.Println("Response:")
-	// fmt.Println(resp)
-	// fmt.Println("ResponseBody:")
-	// fmt.Println(resp.Body)
-	// defer resp.Body.Close()
-
-	// if resp.StatusCode != http.StatusOK {
-	// 	body, err := io.ReadAll(resp.Body)
-	// 	if err != nil {
-	// 		fmt.Println("Error reading response body:", err)
-	// 		return err
-	// 	}
-	// 	fmt.Printf("\nError: %s\n> ", body)
-	// 	return err
-	// }
 
 	// Create the directory if it doesn't exist
-	err = os.MkdirAll("./files/requested/", 0755)
+	err := os.MkdirAll("./files/requested/", 0755)
 	if err != nil {
 		panic(err)
 	}
 
 	// Create file
-	_, err = os.Create("./files/requested/" + file_hash)
+	destFile, err := os.Create("./files/requested/" + file_hash)
 	if err != nil {
 		return err
 	}
+	defer destFile.Close()
 
-	err = os.WriteFile(filepath.Join("./files/requested/", file_hash), data, 0666)
-	if err != nil {
-		return err
+	chunkIndex := 0
+	for {
+		maxChunk, data, err := client.getChunkData(ip, port, file_hash, chunkIndex)
+		if err != nil {
+			return err
+		}
+
+		if _, err := destFile.Write(data); err != nil {
+			return err
+		}
+
+		chunkIndex++
+		if chunkIndex == maxChunk {
+			break
+		}
 	}
 
 	fmt.Printf("\nFile %s downloaded successfully!\n> ", file_hash)
@@ -173,22 +163,22 @@ func (client *Client) RequestStorage(ip, port, filename string) (string, error) 
 }
 
 func (client *Client) GetDirectory(ip string, port int32, path string) {
-	data, err := client.getData(ip, port, path)
-	if err != nil {
-		fmt.Println("Failed to Get Directory")
-		return
-	}
-	var dir_tree map[string]any
-	err = json.Unmarshal(data, &dir_tree)
-	if err != nil {
-		fmt.Println("Failed to parse dir tree")
-		return
-	}
-	err = client.getDirectory(ip, port, dir_tree)
-	if err != nil {
-		fmt.Println("Failed to Get Directory")
-		return
-	}
+	// data, err := client.getData(ip, port, path)
+	// if err != nil {
+	// 	fmt.Println("Failed to Get Directory")
+	// 	return
+	// }
+	// var dir_tree map[string]any
+	// err = json.Unmarshal(data, &dir_tree)
+	// if err != nil {
+	// 	fmt.Println("Failed to parse dir tree")
+	// 	return
+	// }
+	// err = client.getDirectory(ip, port, dir_tree)
+	// if err != nil {
+	// 	fmt.Println("Failed to Get Directory")
+	// 	return
+	// }
 }
 
 func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]any) error {
@@ -307,17 +297,12 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 	return string(body), nil
 }
 
-func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, error) {
-
-	// file_hash := client.name_map.GetFileHash(filename)
-	// if file_hash == "" {
-	// 	fmt.Println("Error: do not have hash for the file")
-	// 	return nil, errors.New("name not found")
-	// }
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s", ip, port, file_hash))
+//int return value will be the length of chunk indexes from response header
+func (client *Client) getChunkData(ip string, port int32, file_hash string, chunk int) (int, []byte, error) {
+	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk-index=%d", ip, port, file_hash, chunk))
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
-		return nil, err
+		return -1, nil, err
 	}
 	defer resp.Body.Close()
 
@@ -325,17 +310,56 @@ func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
 			fmt.Println("Error reading response body:", err)
-			return nil, err
+			return -1, nil, err
 		}
 		fmt.Printf("\nError: %s\n ", body)
-		return nil, errors.New("http status not ok")
+		return -1, nil, errors.New("http status not ok\n")
 	}
 
 	data := bytes.NewBuffer([]byte{})
 
 	_, err = io.Copy(data, resp.Body)
 	if err != nil {
-		return nil, err
+		return -1, nil, err
 	}
-	return data.Bytes(), nil
+
+	chunkLengths, err := strconv.Atoi(resp.Header.Get("X-Chunks-Length"))
+	if err != nil {
+		return -1, nil, err
+	}
+
+	return chunkLengths, data.Bytes(), nil
 }
+
+// func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, error) {
+
+// 	// file_hash := client.name_map.GetFileHash(filename)
+// 	// if file_hash == "" {
+// 	// 	fmt.Println("Error: do not have hash for the file")
+// 	// 	return nil, errors.New("name not found")
+// 	// }
+// 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk=0", ip, port, file_hash))
+// 	if err != nil {
+// 		fmt.Printf("Error: %s\n", err)
+// 		return nil, err
+// 	}
+// 	defer resp.Body.Close()
+
+// 	if resp.StatusCode != http.StatusOK {
+// 		body, err := io.ReadAll(resp.Body)
+// 		if err != nil {
+// 			fmt.Println("Error reading response body:", err)
+// 			return nil, err
+// 		}
+// 		fmt.Printf("\nError: %s\n ", body)
+// 		return nil, errors.New("http status not ok")
+// 	}
+
+// 	data := bytes.NewBuffer([]byte{})
+
+// 	_, err = io.Copy(data, resp.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return data.Bytes(), nil
+// }

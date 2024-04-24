@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
+	"orca-peer/internal/fileshare"
 	"os"
 	"path/filepath"
 	"time"
@@ -122,6 +123,12 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 		storage: hash.NewDataStore("files/stored/"),
 	}
 	go orcaJobs.InitPeriodicJobSave()
+
+	fileShareServer := FileShareServerNode{
+		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
+	}
+
+	//Why are there routes in 2 different spots?
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
@@ -135,7 +142,8 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/remove-peer", removePeer)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
+	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
+	api.InitServer(&fileShareServer.StoredFileInfoMap)
 	http.ListenAndServe(":"+httpPort, nil)
 }
 

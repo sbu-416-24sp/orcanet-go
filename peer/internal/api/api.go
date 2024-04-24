@@ -4,7 +4,6 @@ import (
 	"crypto/rsa"
 	"crypto/sha256"
 	"strings"
-
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -14,7 +13,9 @@ import (
 	orcaJobs "orca-peer/internal/jobs"
 	orcaMining "orca-peer/internal/mining"
 	"orca-peer/internal/server"
+	"orca-peer/internal/fileshare"
 	"os"
+	"strconv"
 	"path/filepath"
 )
 
@@ -27,6 +28,7 @@ var backend *Backend
 var peers *PeerStorage
 var publicKey *rsa.PublicKey
 var privateKey *rsa.PrivateKey
+var storedFileInfoMap map[string]fileshare.FileInfo
 
 type GetFileJSONResponseBody struct {
 	Filename    string   `json:"name"`
@@ -35,23 +37,50 @@ type GetFileJSONResponseBody struct {
 	Producers   []string `json:"listProducers"`
 }
 
-func handleFileRoute(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodDelete {
-		path := r.URL.Path
-		parts := strings.Split(path, "/")
-		if len(parts) != 3 {
-			http.NotFound(w, r)
-			return
-		}
-		hash := parts[2]
-		filePath := "./files/" + hash
-		if _, err := os.Stat(filePath); err == nil {
-			err := os.Remove(filePath)
-			if err != nil {
-				w.WriteHeader(http.StatusInternalServerError)
-				writeStatusUpdate(w, "Error removing file from local directory.")
-				return
-			}
+func getFile(w http.ResponseWriter, r *http.Request) {
+	// Parse query parameters
+	queryParams := r.URL.Query()
+	hash := queryParams.Get("hash")
+	chunkIndex := queryParams.Get("chunk-index")
+
+	// Check if the "hash" parameter is present
+	if hash == "" {
+		http.Error(w, "Missing 'hash' parameter", http.StatusBadRequest)
+		return
+	}
+	fmt.Println("hash:", hash)
+	fileaddress := ""
+
+	if chunkIndex == "" {
+		http.Error(w, "Missing 'chunk-index' parameter", http.StatusBadRequest)
+		return
+	}
+	fmt.Println("chunk:", chunkIndex)
+	chunkIndexInt, err := strconv.Atoi(chunkIndex)
+	if err != nil{
+		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
+		return
+	}
+	fileaddress = ""
+	orcaFileInfo, ok := storedFileInfoMap[hash]
+	if !ok {
+		http.Error(w, "Specified hash is not in orcastore fileshare server node list", http.StatusBadRequest)
+	}
+
+	hashes := orcaFileInfo.ChunkHashes
+	if chunkIndexInt >= len(hashes) {
+		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
+		return
+	}
+
+	if _, err := os.Stat("files/stored/" + hashes[chunkIndexInt]); !os.IsNotExist(err) {
+		fileaddress = "files/stored/" + hashes[chunkIndexInt]
+	}
+
+	if fileaddress != "" {
+		fmt.Println("File address:", fileaddress)
+		w.Header().Set("X-Chunks-Length", fmt.Sprintf("%d", len(hashes)))
+		http.ServeFile(w, r, fileaddress)
 
 		} else if os.IsNotExist(err) {
 			w.WriteHeader(http.StatusBadRequest)
@@ -444,7 +473,8 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 
 }
 
-func InitAPIServer() {
+func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
+	storedFileInfoMap = *fileInfoMap
 	backend = NewBackend()
 	peers = NewPeerStorage()
 	fmt.Println("Settig up API Routes")
