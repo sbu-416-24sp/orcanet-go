@@ -56,13 +56,14 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fileaddress = ""
-
 	orcaFileInfo, ok := storedFileInfoMap[hash]
 	if !ok {
 		http.Error(w, "Specified hash is not in orcastore fileshare server node list", http.StatusBadRequest)
 	}
 
 	hashes := orcaFileInfo.ChunkHashes
+	fmt.Println(orcaFileInfo)
+	fmt.Println(hashes)
 	if chunkIndexInt >= len(hashes) {
 		http.Error(w, "Bad chunk index parameter", http.StatusBadRequest)
 		return
