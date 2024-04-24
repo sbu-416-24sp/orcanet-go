@@ -163,22 +163,22 @@ func (client *Client) RequestStorage(ip, port, filename string) (string, error) 
 }
 
 func (client *Client) GetDirectory(ip string, port int32, path string) {
-	data, err := client.getData(ip, port, path)
-	if err != nil {
-		fmt.Println("Failed to Get Directory")
-		return
-	}
-	var dir_tree map[string]any
-	err = json.Unmarshal(data, &dir_tree)
-	if err != nil {
-		fmt.Println("Failed to parse dir tree")
-		return
-	}
-	err = client.getDirectory(ip, port, dir_tree)
-	if err != nil {
-		fmt.Println("Failed to Get Directory")
-		return
-	}
+	// data, err := client.getData(ip, port, path)
+	// if err != nil {
+	// 	fmt.Println("Failed to Get Directory")
+	// 	return
+	// }
+	// var dir_tree map[string]any
+	// err = json.Unmarshal(data, &dir_tree)
+	// if err != nil {
+	// 	fmt.Println("Failed to parse dir tree")
+	// 	return
+	// }
+	// err = client.getDirectory(ip, port, dir_tree)
+	// if err != nil {
+	// 	fmt.Println("Failed to Get Directory")
+	// 	return
+	// }
 }
 
 func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]any) error {
@@ -331,35 +331,35 @@ func (client *Client) getChunkData(ip string, port int32, file_hash string, chun
 	return chunkLengths, data.Bytes(), nil
 }
 
-func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, error) {
+// func (client *Client) getData(ip string, port int32, file_hash string) ([]byte, error) {
 
-	// file_hash := client.name_map.GetFileHash(filename)
-	// if file_hash == "" {
-	// 	fmt.Println("Error: do not have hash for the file")
-	// 	return nil, errors.New("name not found")
-	// }
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk=0", ip, port, file_hash))
-	if err != nil {
-		fmt.Printf("Error: %s\n", err)
-		return nil, err
-	}
-	defer resp.Body.Close()
+// 	// file_hash := client.name_map.GetFileHash(filename)
+// 	// if file_hash == "" {
+// 	// 	fmt.Println("Error: do not have hash for the file")
+// 	// 	return nil, errors.New("name not found")
+// 	// }
+// 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk=0", ip, port, file_hash))
+// 	if err != nil {
+// 		fmt.Printf("Error: %s\n", err)
+// 		return nil, err
+// 	}
+// 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			fmt.Println("Error reading response body:", err)
-			return nil, err
-		}
-		fmt.Printf("\nError: %s\n ", body)
-		return nil, errors.New("http status not ok")
-	}
+// 	if resp.StatusCode != http.StatusOK {
+// 		body, err := io.ReadAll(resp.Body)
+// 		if err != nil {
+// 			fmt.Println("Error reading response body:", err)
+// 			return nil, err
+// 		}
+// 		fmt.Printf("\nError: %s\n ", body)
+// 		return nil, errors.New("http status not ok")
+// 	}
 
-	data := bytes.NewBuffer([]byte{})
+// 	data := bytes.NewBuffer([]byte{})
 
-	_, err = io.Copy(data, resp.Body)
-	if err != nil {
-		return nil, err
-	}
-	return data.Bytes(), nil
-}
+// 	_, err = io.Copy(data, resp.Body)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return data.Bytes(), nil
+// }
