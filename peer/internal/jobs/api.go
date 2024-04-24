@@ -242,7 +242,7 @@ func TerminateJobsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func InitJobRoutes() {
-	http.HandleFunc("/terminate-job", TerminateJobsHandler)
+	http.HandleFunc("/terminate-jobs", TerminateJobsHandler)
 	http.HandleFunc("/pause-jobs", PauseJobsHandler)
 	http.HandleFunc("/job-info", JobInfoHandler)
 	http.HandleFunc("/add-job", AddJobHandler)

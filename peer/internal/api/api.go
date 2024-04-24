@@ -12,14 +12,10 @@ import (
 	"net/http"
 	orcaHash "orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
+	"orca-peer/internal/server"
 	"os"
 	"path/filepath"
 )
-
-type GetFileJSONBody struct {
-	Filename string `json:"filename"`
-	Hash     string `json:"hash"`
-}
 
 type UploadFileJSONBody struct {
 	Filepath string `json:"filepath"`
@@ -30,6 +26,13 @@ var backend *Backend
 var peers *PeerStorage
 var publicKey *rsa.PublicKey
 var privateKey *rsa.PrivateKey
+
+type GetFileJSONResponseBody struct {
+	Filename    string   `json:"name"`
+	Size        int      `json:"size"`
+	NumberPeers int      `json:"numberOfPeers"`
+	Producers   []string `json:"listProducers"`
+}
 
 func handleFileRoute(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodDelete {
@@ -61,6 +64,38 @@ func handleFileRoute(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		writeStatusUpdate(w, "Successfully removed file.")
 		return
+	} else if r.Method == http.MethodGet {
+		path := r.URL.Path
+		parts := strings.Split(path, "/")
+		if len(parts) != 4 || parts[3] != "info" {
+			http.NotFound(w, r)
+			return
+		}
+		hash := parts[2]
+		holders, err := server.SetupCheckHolders(hash)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Unable to find holders of this file.")
+		}
+		peers := make([]string, 0)
+		for _, holder := range holders.Holders {
+			peers = append(peers, holder.Ip)
+		}
+		responseBody := GetFileJSONResponseBody{
+			Filename:    hash,
+			Size:        0,
+			NumberPeers: len(peers),
+			Producers:   peers,
+		}
+		jsonData, err := json.Marshal(responseBody)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		writeStatusUpdate(w, "Only DELETE requests will be handled.")
@@ -421,7 +456,7 @@ func writeFile(w http.ResponseWriter, r *http.Request) {
 func InitAPIServer() {
 	backend = NewBackend()
 	peers = NewPeerStorage()
-	fmt.Println("SETTING UP ROUTES")
+	fmt.Println("Settig up API Routes")
 	publicKey, privateKey = orcaHash.LoadInKeys()
 	orcaJobs.InitJobRoutes()
 	http.HandleFunc("/file/", handleFileRoute)
