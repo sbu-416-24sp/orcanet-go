@@ -14,6 +14,7 @@ import (
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -22,7 +23,7 @@ var (
 	ip string
 )
 
-func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey) {
+func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey, orcaNetAPIProc *exec.Cmd) {
 	fmt.Println("Loading...")
 	rpcPort := getPort("Market RPC Server")
 	dhtPort := getPort("Market DHT Host")
@@ -192,6 +193,11 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				if err != nil {
 					fmt.Printf("Error cleaning up stored files: %s\n", err)
 				}
+			}
+
+			err = orcaNetAPIProc.Process.Signal(os.Interrupt)
+			if err != nil {
+				fmt.Printf("Error killing OrcaNet: %s\n", err)
 			}
 
 			return

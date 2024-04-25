@@ -2,10 +2,11 @@ package main
 
 import (
 	"flag"
-	orcaBlockchain "orca-peer/internal/blockchain"
 	orcaCLI "orca-peer/internal/cli"
 	orcaHash "orca-peer/internal/hash"
 	"os"
+	"os/exec"
+	"fmt"
 )
 
 var boostrapNodeAddress string
@@ -15,6 +16,14 @@ func main() {
 	flag.Parse()
 	publicKey, privateKey := orcaHash.LoadInKeys()
 	os.MkdirAll("./files/stored/", 0755)
-	go orcaBlockchain.StartBitcoinNode()
-	orcaCLI.StartCLI(&boostrapNodeAddress, publicKey, privateKey)
+	cmd := exec.Command("./OrcaNetAPIServer")
+	cmd.Dir = "../coin/"
+	err := cmd.Start()
+	if err != nil {
+		fmt.Printf("Error starting OrcaNetAPIServer: %s\n", err)
+		return
+	}
+	fmt.Println("Started block chain api server")
+	orcaCLI.StartCLI(&boostrapNodeAddress, publicKey, privateKey, cmd)
+	return 
 }
