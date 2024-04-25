@@ -21,12 +21,11 @@ import (
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
 	"os"
+	"strings"
 	"sync"
 	"time"
-	"strings"
-	"google.golang.org/grpc"
+
 	"github.com/go-ping/ping"
-	"github.com/ipinfo/go/ipinfo"
 	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
@@ -37,16 +36,18 @@ import (
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
 	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/oschwald/geoip2-golang"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 type FileShareServerNode struct {
 	fileshare.UnimplementedFileShareServer
-	K_DHT   *dht.IpfsDHT
-	PrivKey libp2pcrypto.PrivKey
-	PubKey  libp2pcrypto.PubKey
-	V       record.Validator
+	K_DHT             *dht.IpfsDHT
+	PrivKey           libp2pcrypto.PrivKey
+	PubKey            libp2pcrypto.PubKey
+	V                 record.Validator
 	StoredFileInfoMap map[string]fileshare.FileInfo //This is the list of files we are storing
 }
 
@@ -56,7 +57,7 @@ var (
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode){
+func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode) {
 	ctx := context.Background()
 
 	//Get libp2p wrapped privKey
@@ -138,7 +139,7 @@ func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort stri
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
 
-	serverReady <- true	
+	serverReady <- true
 	serverStruct = *fileShareServer
 	if err := s.Serve(lis); err != nil {
 		panic(err)
@@ -160,7 +161,7 @@ func GetPeerTable() map[string]PeerInfo {
 func DisconnectPeer(peerId string) error {
 	peerTableMUT.Lock()
 	if val, ok := peerTable[peerId]; ok {
-		val.Connection = "NO"
+		val.OpenStreams = "NO"
 		peerTable[peerId] = val
 	} else {
 		peerTableMUT.Unlock()
@@ -182,12 +183,17 @@ func getLocationFromIP(peerId string) (string, error) {
 		if err != nil || strings.Contains(ipStr, "127.0.0.1") {
 			return "", nil
 		}
-		client := ipinfo.NewClient(nil)
-		coords, err := client.GetLocation(net.ParseIP(ipStr))
+		ip := net.ParseIP(ipStr)
+
+		db, err := geoip2.Open("./rsrc/GeoLite2-Country.mmdb")
 		if err != nil {
 			log.Fatal(err)
 		}
-		val.Location = coords
+		record, err := db.Country(ip)
+		if err != nil {
+			log.Fatal(err)
+		}
+		val.Location = record.Country.Names["en"]
 		peerTable[peerId] = val
 	} else {
 		peerTableMUT.Unlock()

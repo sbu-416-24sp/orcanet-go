@@ -537,12 +537,12 @@ var RegressionNetParams = Params{
 	HDCoinType: 1,
 }
 
-//OrcaNetParams defines the network parameters for the OrcaNet network.
+// OrcaNetParams defines the network parameters for the OrcaNet network.
 var OrcaNetParams = Params{
-    Name:        "orcanet",
+	Name:        "orcanet",
 	Net:         wire.OrcaNet,
 	DefaultPort: "8444",
-	DNSSeeds: []DNSSeed{},
+	DNSSeeds:    []DNSSeed{},
 
 	// Chain parameters
 	GenesisBlock:             &orcaNetGenesisBlock,
@@ -555,7 +555,7 @@ var OrcaNetParams = Params{
 	CoinbaseMaturity:         1,
 	SubsidyReductionInterval: 210000,
 	TargetTimespan:           time.Hour * 24 * 10, // 10 days
-	TargetTimePerBlock:       time.Minute * 1,    // 10 minutes
+	TargetTimePerBlock:       time.Minute * 1,     // 10 minutes
 	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
 	ReduceMinDifficulty:      false,
 	MinDiffReductionTime:     0,
@@ -644,8 +644,6 @@ var OrcaNetParams = Params{
 	// address generation.
 	HDCoinType: 0,
 }
-
- 
 
 // TestNet3Params defines the network parameters for the test Bitcoin network
 // (version 3).  Not to be confused with the regression test network, this
