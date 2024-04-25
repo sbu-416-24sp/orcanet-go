@@ -38,7 +38,7 @@ Second, make sure you create the executable for the bitcoin nodes. It can be don
 
 $ cd coin
 
-$ make
+$ ./build.sh
 
 ```
 
