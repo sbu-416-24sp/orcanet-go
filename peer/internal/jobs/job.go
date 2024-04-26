@@ -6,27 +6,6 @@ import (
 	"os"
 )
 
-/*
-
-### Endpoints
-
-/job-list
-  Description: Returns list of current jobs.
-  GET
-  Parameters:
-    none
-  Returns:
-    {
-      jobs: {
-        jobID: JobID,
-        fileName: string,
-        fileSize: int // bytes,
-        eta: int // seconds
-        timeQueued: Date,
-        status: "active" | "paused" | "error" | "completed",
-      }[]
-*/
-
 func AddJob(job Job) {
 	Manager.Mutex.Lock()
 	Manager.Jobs = append(Manager.Jobs, job)

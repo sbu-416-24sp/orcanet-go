@@ -240,6 +240,24 @@ func TerminateJobsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+func JobListHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		currentJobs := Manager.Jobs
+		jsonData, err := json.Marshal(currentJobs)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only GET requests will be handled.")
+		return
+	}
+}
 
 func GetHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
@@ -273,5 +291,5 @@ func InitJobRoutes() {
 	http.HandleFunc("/remove-from-history", RemoveFromHistoryHandler)
 	http.HandleFunc("/clear-history", ClearHistoryHandler)
 	http.HandleFunc("/get-history", GetHistoryHandler)
-
+	http.HandleFunc("/job-list", JobListHandler)
 }
