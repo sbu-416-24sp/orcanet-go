@@ -11,8 +11,8 @@ import (
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
 	"os"
-	"strconv"
 	"path/filepath"
+	"strconv"
 )
 
 type Client struct {
@@ -297,7 +297,7 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 	return string(body), nil
 }
 
-//int return value will be the length of chunk indexes from response header
+// int return value will be the length of chunk indexes from response header
 func (client *Client) getChunkData(ip string, port int32, file_hash string, chunk int) (int, []byte, error) {
 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk-index=%d", ip, port, file_hash, chunk))
 	if err != nil {
