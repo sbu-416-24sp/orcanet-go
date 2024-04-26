@@ -52,7 +52,7 @@ $ make all
 
 ```
 
-This will start up the peer node. You should see output in the terminal. You will need to enter in <i>three<i> numbers into the terminal before the peer node is fully running. These three numbers will be the port numbers used by the peer node to connect with various services. 
+This will start up the peer node. You should see output in the terminal. You will need to enter in <i>three<i> numbers into the terminal before the peer node is fully running. These three numbers will be the port numbers used by the peer node to connect with various services. There is no agrred upon port number, but currently, these three ports can be the official
 
 ## CLI interface
 
@@ -145,4 +145,28 @@ Here is all of the routes available on the HTTP server that is started when the 
 
 ---
 
-Routes should follow the API laid out in the document from the front end team.
+Routes should follow the API laid out in the document from the front end team. 
+
+
+Some additional internal routes we added for communicating between peer nodes are below. These should be peer to peer only, not front-end to peer.
+
+/requestFile/
+/sendTransaction
+/writeFile
+/sendMoney
+/getLocation
+/getAllStored
+
+The blockchain routes that currently exist are as follows. We still need to fix it to match the specification.
+
+/getBlockchainInfo
+/getNewAddress
+/getBalance
+/mine
+/sendToAddress
+
+Settings have not been implmented. Are we keeping it on the front-end?
+
+Statistics are also a work in progress.
+
+All other routes, should be as follows on the API document.
