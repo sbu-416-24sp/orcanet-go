@@ -163,7 +163,7 @@ func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
 		w.Write(jsonData)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
-		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		writeStatusUpdate(w, "Only GET requests will be handled.")
 		return
 	}
 }
@@ -241,11 +241,37 @@ func TerminateJobsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func GetHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		histories, err := LoadHistory()
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Unable to read all histories")
+		}
+		jsonData, err := json.Marshal(histories)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only GET requests will be handled.")
+		return
+	}
+}
+
 func InitJobRoutes() {
 	http.HandleFunc("/terminate-jobs", TerminateJobsHandler)
 	http.HandleFunc("/pause-jobs", PauseJobsHandler)
 	http.HandleFunc("/job-info", JobInfoHandler)
 	http.HandleFunc("/add-job", AddJobHandler)
+	http.HandleFunc("/start-jobs", StartJobsHandler)
 	http.HandleFunc("/remove-from-history", RemoveFromHistoryHandler)
 	http.HandleFunc("/clear-history", ClearHistoryHandler)
+	http.HandleFunc("/get-history", GetHistoryHandler)
+
 }

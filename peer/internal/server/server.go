@@ -1,13 +1,11 @@
 package server
 
 import (
-	"context"
 	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"orca-peer/internal/fileshare"
 	"orca-peer/internal/hash"
@@ -25,31 +23,6 @@ var (
 
 type HTTPServer struct {
 	storage *hash.DataStore
-}
-
-func Init() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", getRoot)
-	mux.HandleFunc("/requestFile", getFile)
-	mux.HandleFunc("/sendTransaction", handleTransaction)
-
-	ctx := context.Background()
-	server := &http.Server{
-		Addr:    ":3333",
-		Handler: mux,
-		BaseContext: func(l net.Listener) context.Context {
-			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
-			return ctx
-		},
-	}
-	go func() {
-		err := server.ListenAndServe()
-		if errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("Server closed\n")
-		} else if err != nil {
-			fmt.Printf("Error listening for server: %s\n", err)
-		}
-	}()
 }
 
 type TransactionFile struct {
@@ -138,12 +111,66 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/sendTransaction", handleTransaction)
 	http.HandleFunc("/get-peers", getAllPeers)
 	http.HandleFunc("/get-peer", getPeer)
+	http.HandleFunc("/find-peer", FindPeersForHash)
 	http.HandleFunc("/remove-peer", removePeer)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
 	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
 	http.ListenAndServe(":"+httpPort, nil)
+}
+
+type Peer struct {
+	PeerId string  `json:"peerID"`
+	Ip     string  `json:"ip"`
+	Region string  `json:"region"`
+	Price  float32 `json:"price"`
+}
+
+func FindPeersForHash(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		queryParams := r.URL.Query()
+		hash := queryParams.Get("fileHash")
+		peers, err := findPeersForHash(hash)
+		if err != nil {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeStatusUpdate(w, "Errors retrieving information about peers holding this hash.")
+			return
+		}
+		jsonData, err := json.Marshal(peers)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		return
+	}
+}
+
+func findPeersForHash(fileHash string) ([]Peer, error) {
+	holders, err := SetupCheckHolders(fileHash)
+	if err != nil {
+		return []Peer{}, err
+	}
+	peers := make([]Peer, 0)
+	for _, holder := range holders.Holders {
+		location, err := getLocationFromIP(string(holder.GetId()))
+		if err != nil {
+			return []Peer{}, errors.New("unable to get location about peer")
+		}
+		peers = append(peers, Peer{
+			PeerId: string(holder.GetId()),
+			Ip:     holder.Ip,
+			Region: location,
+		})
+	}
+	return peers, nil
 }
 
 func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confirming *bool, confirmation *string) {
