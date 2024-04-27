@@ -281,6 +281,7 @@ func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
 	orcaMining.InitDeviceTracker()
 	http.HandleFunc("/file/", handleFileRoute)
 	http.HandleFunc("/upload", uploadFile)
+	http.HandleFunc("/get-file", getFile)
 
 	http.HandleFunc("/writeFile", writeFile)
 	http.HandleFunc("/sendMoney", sendMoney)
