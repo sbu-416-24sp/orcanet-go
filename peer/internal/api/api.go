@@ -14,6 +14,7 @@ import (
 	orcaMining "orca-peer/internal/mining"
 	"orca-peer/internal/server"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 )
@@ -271,6 +272,70 @@ func handleFileRoute(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type GetFileJSONBody struct {
+	Filename string `json:"filename"`
+	Hash     string `json:"hash"`
+}
+
+func deleteFile(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodDelete {
+
+		contentType := r.Header.Get("Content-Type")
+		switch contentType {
+		case "application/json":
+			// For JSON content type, decode the JSON into a struct
+			var payload GetFileJSONBody
+			decoder := json.NewDecoder(r.Body)
+			if err := decoder.Decode(&payload); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
+				return
+			}
+			if payload.Filename == "" && payload.Hash == "" {
+
+				w.WriteHeader(http.StatusInternalServerError)
+				writeStatusUpdate(w, "Missing Filename and CID values inside of the payload.")
+				return
+			}
+			fileDir := "./files/"
+			filePath := "./files/" + payload.Hash
+
+			// Check if the file exists in the "stored" directory
+			storedFilePath := filepath.Join(fileDir, "stored", payload.Hash)
+			if _, err := os.Stat(storedFilePath); err == nil {
+				//		filePath = storedFilePath
+			}
+			// Check if the file exists in the "requested" directory
+			requestedFilePath := filepath.Join(fileDir, "requested", payload.Hash)
+			if _, err := os.Stat(requestedFilePath); err == nil {
+				filePath = requestedFilePath
+			}
+			fmt.Println("filePath: ", filePath)
+			// Attempt to delete the file
+			err := os.Remove(filePath)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				writeStatusUpdate(w, "Error removing file from local directory.")
+				return
+			}
+
+			fmt.Println("File deleted successfully.")
+			return
+
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Request must have the content header set as application/json")
+			return
+		}
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only DELETE requests will be handled.")
+
+		return
+	}
+
+}
+
 func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
 	storedFileInfoMap = *fileInfoMap
 	backend = NewBackend()
@@ -282,6 +347,8 @@ func InitServer(fileInfoMap *map[string]fileshare.FileInfo) {
 	http.HandleFunc("/file/", handleFileRoute)
 	http.HandleFunc("/upload", uploadFile)
 	http.HandleFunc("/get-file", getFile)
+	http.HandleFunc("/upload-file", uploadFile)
+	http.HandleFunc("/delete-file", deleteFile)
 
 	http.HandleFunc("/writeFile", writeFile)
 	http.HandleFunc("/sendMoney", sendMoney)
