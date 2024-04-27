@@ -305,11 +305,6 @@ func (server *HTTPServer) storeFile(w http.ResponseWriter, r *http.Request, conf
 	fmt.Printf("\nStored file %s hash %s!\n> ", fileData.FileName, file_hash)
 }
 
-func getRoot(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got /root request\n")
-	io.WriteString(w, "Hello, HTTP!\n")
-}
-
 func getFile(w http.ResponseWriter, r *http.Request) {
 	// Get the context from the request
 	ctx := r.Context()

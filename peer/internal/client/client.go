@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	orcaBlockchain "orca-peer/internal/blockchain"
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
 	"os"
@@ -99,7 +100,7 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 	defer resp.Body.Close()
 
 }
-func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error {
+func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string) error {
 	/*
 		file_hash := client.name_map.GetFileHash(filename)
 		if file_hash == "" {
@@ -127,7 +128,10 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error
 		if err != nil {
 			return err
 		}
-
+		err = client.sendTransactionFee(price, walletAddress, passKey)
+		if err != nil {
+			return err
+		}
 		if _, err := destFile.Write(data); err != nil {
 			return err
 		}
@@ -189,7 +193,8 @@ func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]an
 			if err != nil {
 				return err
 			}
-			err = client.GetFileOnce(ip, port, path)
+			// need to fix to match new blockchain requirements
+			err = client.GetFileOnce(ip, port, path, "", "", "")
 			if err != nil {
 				return err
 			}
@@ -297,6 +302,11 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 	return string(body), nil
 }
 
+func (client *Client) sendTransactionFee(coins string, address string, senderWalletPass string) error {
+	err := orcaBlockchain.SendToAddress(coins, address, senderWalletPass)
+	return err
+}
+
 // int return value will be the length of chunk indexes from response header
 func (client *Client) getChunkData(ip string, port int32, file_hash string, chunk int) (int, []byte, error) {
 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk-index=%d", ip, port, file_hash, chunk))
@@ -304,6 +314,7 @@ func (client *Client) getChunkData(ip string, port int32, file_hash string, chun
 		fmt.Printf("Error: %s\n", err)
 		return -1, nil, err
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {

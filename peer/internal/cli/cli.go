@@ -28,11 +28,13 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	rpcPort := getPort("Market RPC Server")
 	dhtPort := getPort("Market DHT Host")
 	httpPort := getPort("HTTP Server")
-	for httpPort == "" || rpcPort == "" || dhtPort == "" {
+	passKey := getPassKey()
+	for httpPort == "" || rpcPort == "" || dhtPort == "" || passKey == "" {
 		fmt.Println("All three ports must be given, please try again.")
 		rpcPort = getPort("Market RPC Server")
 		dhtPort = getPort("Market DHT Host")
 		httpPort = getPort("HTTP Server")
+		passKey = getPassKey()
 	}
 	serverReady := make(chan bool)
 	confirming := false
@@ -102,7 +104,8 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				err = client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0])
+				// how to unmarshal public key bytes? string(bestHolder.Id)?
+				err = client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}
@@ -261,4 +264,16 @@ func getPort(useCase string) string {
 
 		fmt.Print("Invalid port. Please enter a different port: ")
 	}
+}
+
+func getPassKey() string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Enter your blockchain wallet passkey: ")
+	passKey, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading input:", err)
+		os.Exit(1)
+	}
+	passKey = strings.TrimSpace(passKey)
+	return passKey
 }
