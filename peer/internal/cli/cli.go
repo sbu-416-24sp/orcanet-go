@@ -104,7 +104,25 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				// how to unmarshal public key bytes? string(bestHolder.Id)?
+				// Trying to convert bytes into readable key string
+				// IDK what format is needed
+				/*
+					publicKey, err := crypto.UnmarshalRsaPublicKey(bestHolder.Id)
+					if err != nil {
+						fmt.Println("Error loading in key file:", err)
+						os.Exit(1)
+					}
+					fmt.Printf("%s ", publicKey.Type().String())
+					pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+					if err != nil {
+						log.Fatal("failed to parse DER encoded public key: ", err)
+					}
+					rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+					if !ok {
+						log.Fatal("not an RSA public key")
+					}
+					//rsaPubKey.N.String(), rsaPubKey.E
+				*/
 				err = client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
