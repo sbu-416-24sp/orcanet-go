@@ -110,10 +110,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				if err != nil {
-					fmt.Println("Error loading in key file:", err)
-					os.Exit(1)
-				}
 				pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
 				if err != nil {
 					log.Fatal("failed to parse DER encoded public key: ", err)
@@ -123,8 +119,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					log.Fatal("not an RSA public key")
 				}
 				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-				fmt.Printf("%s", key)
-				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
+				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}
