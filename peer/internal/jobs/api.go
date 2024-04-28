@@ -54,6 +54,14 @@ func UpdateJobStatus(jobId string, status string) error {
 	Manager.Mutex.Unlock()
 	return nil
 }
+func GetJobStatus(jobId string) string {
+	for _, job := range Manager.Jobs {
+		if job.JobId == jobId {
+			return job.Status
+		}
+	}
+	return ""
+}
 func UpdateJobCost(jobId string, additionalCost int) error {
 	Manager.Mutex.Lock()
 	for idx, job := range Manager.Jobs {

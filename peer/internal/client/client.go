@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 )
 
 type Client struct {
@@ -147,6 +148,19 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walle
 		chunkIndex++
 		if chunkIndex == maxChunk {
 			break
+		}
+		if jobId != "" {
+			status := orcaJobs.GetJobStatus(jobId)
+			if status == "terminated" {
+				return nil
+			} else if status == "paused" {
+				for {
+					time.Sleep(10 * time.Second)
+					if orcaJobs.GetJobStatus(jobId) != "paused" {
+						break
+					}
+				}
+			}
 		}
 	}
 
