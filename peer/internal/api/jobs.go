@@ -52,7 +52,7 @@ func JobPeerHandler(w http.ResponseWriter, r *http.Request) {
 				writeStatusUpdate(w, "Failed to convert JSON Data into a string")
 				return
 			}
-			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(jsonData)
 		} else {

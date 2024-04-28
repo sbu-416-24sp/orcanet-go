@@ -42,6 +42,30 @@ func InitPeriodicJobSave() {
 		Manager.Mutex.Unlock()
 	}
 }
+func UpdateJobStatus(jobId string, status string) error {
+	Manager.Mutex.Lock()
+	for idx, job := range Manager.Jobs {
+		if job.JobId == jobId {
+			Manager.Jobs[idx].Status = status
+			Manager.Changed = true
+			break
+		}
+	}
+	Manager.Mutex.Unlock()
+	return nil
+}
+func UpdateJobCost(jobId string, additionalCost int) error {
+	Manager.Mutex.Lock()
+	for idx, job := range Manager.Jobs {
+		if job.JobId == jobId {
+			Manager.Jobs[idx].AccumulatedCost += additionalCost
+			Manager.Changed = true
+			break
+		}
+	}
+	Manager.Mutex.Unlock()
+	return nil
+}
 func writeStatusUpdate(w http.ResponseWriter, message string) {
 	responseMsg := map[string]interface{}{
 		"status": message,
@@ -87,7 +111,7 @@ func RemoveFromHistoryHandler(w http.ResponseWriter, r *http.Request) {
 func ClearHistoryHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPatch {
 		ClearHistory()
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -116,7 +140,7 @@ func JobInfoHandler(w http.ResponseWriter, r *http.Request) {
 			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
 			return
 		}
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(jsonData)
 	} else {

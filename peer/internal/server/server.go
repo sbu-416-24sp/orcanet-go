@@ -382,7 +382,7 @@ func ConvertKeyToString(n *big.Int, e int) string {
 	publicKeyString := string(pem.EncodeToMemory(&publicKeyPEM))
 	return publicKeyString
 }
-func jobRoutine(hash string, peerId string) {
+func jobRoutine(jobId string, hash string, peerId string) {
 	holders, err := SetupCheckHolders(hash)
 	if err != nil {
 		fmt.Printf("Error finding holders for file: %x", err)
@@ -450,14 +450,14 @@ func AddJobHandler(w http.ResponseWriter, r *http.Request) {
 			FileHash:        payload.FileHash,
 			JobId:           id.String(),
 			TimeQueued:      timeString,
-			Status:          "paused",
+			Status:          "active",
 			AccumulatedCost: 0,
 			ProjectedCost:   -1,
 			ETA:             -1,
 			PeerId:          payload.PeerId,
 		}
 		orcaJobs.AddJob(newJob)
-		go jobRoutine(payload.FileHash, payload.PeerId)
+		go jobRoutine(newJob.JobId, payload.FileHash, payload.PeerId)
 		w.WriteHeader(http.StatusOK)
 		response := AddJobResPayload{JobId: newJob.JobId}
 		jsonData, err := json.Marshal(response)
