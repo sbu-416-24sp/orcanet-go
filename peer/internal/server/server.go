@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	crypto "github.com/libp2p/go-libp2p/core/crypto"
 )
 
 const keyServerAddr = "serverAddr"
@@ -411,15 +410,7 @@ func jobRoutine(hash string, peerId string) {
 		bestHolder = selectedHolder
 	}
 	fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-	// Trying to convert bytes into readable key string
-	// IDK what format is needed
 
-	publicKey, err := crypto.UnmarshalRsaPublicKey(bestHolder.Id)
-	if err != nil {
-		fmt.Println("Error loading in key file:", err)
-		os.Exit(1)
-	}
-	fmt.Printf("%s ", publicKey.Type().String())
 	pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
 	if err != nil {
 		log.Fatal("failed to parse DER encoded public key: ", err)
@@ -429,8 +420,7 @@ func jobRoutine(hash string, peerId string) {
 		log.Fatal("not an RSA public key")
 	}
 	key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-	fmt.Printf("%s", key)
-	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey)
+	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey)
 	if err != nil {
 		fmt.Printf("Error getting file %s", err)
 	}
