@@ -420,7 +420,7 @@ func jobRoutine(jobId string, hash string, peerId string) {
 		log.Fatal("not an RSA public key")
 	}
 	key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey)
+	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey, jobId)
 	if err != nil {
 		fmt.Printf("Error getting file %s", err)
 	}

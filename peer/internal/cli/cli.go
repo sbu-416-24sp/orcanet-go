@@ -119,7 +119,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					log.Fatal("not an RSA public key")
 				}
 				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
-				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
+				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey, "")
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}

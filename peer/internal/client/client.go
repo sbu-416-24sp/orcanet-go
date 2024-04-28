@@ -11,6 +11,7 @@ import (
 	orcaBlockchain "orca-peer/internal/blockchain"
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -100,7 +101,7 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 	defer resp.Body.Close()
 
 }
-func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string) error {
+func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string, jobId string) error {
 	/*
 		file_hash := client.name_map.GetFileHash(filename)
 		if file_hash == "" {
@@ -131,6 +132,13 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walle
 		err = client.sendTransactionFee(price, walletAddress, passKey)
 		if err != nil {
 			return err
+		}
+		if jobId != "" {
+			priceInt, err := strconv.ParseInt(price, 10, 64)
+			if err != nil {
+				fmt.Println(err)
+			}
+			orcaJobs.UpdateJobCost(jobId, int(priceInt))
 		}
 		if _, err := destFile.Write(data); err != nil {
 			return err
@@ -194,7 +202,7 @@ func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]an
 				return err
 			}
 			// need to fix to match new blockchain requirements
-			err = client.GetFileOnce(ip, port, path, "", "", "")
+			err = client.GetFileOnce(ip, port, path, "", "", "", "")
 			if err != nil {
 				return err
 			}
