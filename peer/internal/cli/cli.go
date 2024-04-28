@@ -3,26 +3,30 @@ package cli
 import (
 	"bufio"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"net/http"
 	orcaClient "orca-peer/internal/client"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
 	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
+
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
 	"os/exec"
 	"strconv"
 	"strings"
-	"net/http"
-	"io"
 )
 
 var (
-	ip string
+	ip     string
+	Client *orcaClient.Client
 )
 
 func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey, orcaNetAPIProc *exec.Cmd, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
@@ -49,13 +53,13 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		return
 	}
 	ip = locationJson["ip"].(string)
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey, startAPIRoutes)
+	Client = orcaClient.NewClient("files/names/")
+	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey, passKey, Client, startAPIRoutes)
 	<-serverReady
 	fmt.Println("Welcome to Orcanet!")
 	fmt.Println("Dive In and Explore! Type 'help' for available commands.")
 
 	reader := bufio.NewReader(os.Stdin)
-	client := orcaClient.NewClient("files/names/")
 
 	for {
 		fmt.Print("> ")
@@ -106,26 +110,21 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
-				// Trying to convert bytes into readable key string
-				// IDK what format is needed
-				/*
-					publicKey, err := crypto.UnmarshalRsaPublicKey(bestHolder.Id)
-					if err != nil {
-						fmt.Println("Error loading in key file:", err)
-						os.Exit(1)
-					}
-					fmt.Printf("%s ", publicKey.Type().String())
-					pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
-					if err != nil {
-						log.Fatal("failed to parse DER encoded public key: ", err)
-					}
-					rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
-					if !ok {
-						log.Fatal("not an RSA public key")
-					}
-					//rsaPubKey.N.String(), rsaPubKey.E
-				*/
-				err = client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
+				if err != nil {
+					fmt.Println("Error loading in key file:", err)
+					os.Exit(1)
+				}
+				pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+				if err != nil {
+					log.Fatal("failed to parse DER encoded public key: ", err)
+				}
+				rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+				if !ok {
+					log.Fatal("not an RSA public key")
+				}
+				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+				fmt.Printf("%s", key)
+				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), passKey)
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}
@@ -166,7 +165,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			}
 		case "import":
 			if len(args) == 1 {
-				err := client.ImportFile(args[0])
+				err := Client.ImportFile(args[0])
 				if err != nil {
 					fmt.Println(err)
 				}
@@ -233,13 +232,13 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					continue
 				}
 
-				go client.GetDirectory(args[0], int32(port), args[2])
+				go Client.GetDirectory(args[0], int32(port), args[2])
 			} else {
 				fmt.Println("Usage: getdir [ip] [port] [path]")
 			}
 		case "storedir":
 			if len(args) == 3 {
-				go client.StoreDirectory(args[0], args[1], args[2])
+				go Client.StoreDirectory(args[0], args[1], args[2])
 			} else {
 				fmt.Println("Usage: storedir [ip] [port] [path]")
 			}

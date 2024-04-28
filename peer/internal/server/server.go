@@ -2,23 +2,33 @@ package server
 
 import (
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
+	"log"
+	"math/big"
 	"net/http"
+	orcaClient "orca-peer/internal/client"
 	"orca-peer/internal/fileshare"
 	"orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/google/uuid"
+	crypto "github.com/libp2p/go-libp2p/core/crypto"
 )
 
 const keyServerAddr = "serverAddr"
 
 var (
 	eventChannel chan bool
+	Client       *orcaClient.Client
+	PassKey      string
 )
 
 type HTTPServer struct {
@@ -90,13 +100,14 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey, passKey string, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
 	go orcaJobs.InitPeriodicJobSave()
-
+	Client = client
+	PassKey = passKey
 	fileShareServer := FileShareServerNode{
 		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
 	}
@@ -113,6 +124,8 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/get-peer", getPeer)
 	http.HandleFunc("/find-peer", FindPeersForHash)
 	http.HandleFunc("/remove-peer", removePeer)
+
+	http.HandleFunc("/add-job", AddJobHandler)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
@@ -342,5 +355,133 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Write a response indicating that no filename was found
 		io.WriteString(w, "No filename found\n")
+	}
+}
+func ConvertKeyToString(n *big.Int, e int) string {
+	N := n // Replace with your actual modulus
+	E := e // Replace with your actual public exponent
+
+	// Create an RSA public key using the modulus and exponent
+	publicKey := rsa.PublicKey{
+		N: N,
+		E: E,
+	}
+
+	// Marshal the public key into DER format
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&publicKey)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a PEM block for the public key
+	publicKeyPEM := pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyBytes,
+	}
+
+	// Write the PEM-encoded public key to a file (or any io.Writer)
+	publicKeyString := string(pem.EncodeToMemory(&publicKeyPEM))
+	return publicKeyString
+}
+func jobRoutine(hash string, peerId string) {
+	holders, err := SetupCheckHolders(hash)
+	if err != nil {
+		fmt.Printf("Error finding holders for file: %x", err)
+		return
+	}
+	var bestHolder *fileshare.User
+	var selectedHolder *fileshare.User
+	bestHolder = nil
+	selectedHolder = nil
+	for _, holder := range holders.Holders {
+		if bestHolder == nil {
+			bestHolder = holder
+		} else if holder.GetPrice() < bestHolder.GetPrice() {
+			bestHolder = holder
+		}
+		if string(holder.Id) == peerId {
+			selectedHolder = holder
+		}
+	}
+	if bestHolder == nil && selectedHolder == nil {
+		fmt.Println("Unable to find holder for this hash.")
+		return
+	}
+	if selectedHolder != nil {
+		bestHolder = selectedHolder
+	}
+	fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
+	// Trying to convert bytes into readable key string
+	// IDK what format is needed
+
+	publicKey, err := crypto.UnmarshalRsaPublicKey(bestHolder.Id)
+	if err != nil {
+		fmt.Println("Error loading in key file:", err)
+		os.Exit(1)
+	}
+	fmt.Printf("%s ", publicKey.Type().String())
+	pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+	if err != nil {
+		log.Fatal("failed to parse DER encoded public key: ", err)
+	}
+	rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+	if !ok {
+		log.Fatal("not an RSA public key")
+	}
+	key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+	fmt.Printf("%s", key)
+	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, string(bestHolder.Id), fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey)
+	if err != nil {
+		fmt.Printf("Error getting file %s", err)
+	}
+}
+
+type AddJobReqPayload struct {
+	FileHash string `json:"fileHash"`
+	PeerId   string `json:"peer"`
+}
+
+type AddJobResPayload struct {
+	JobId string `json:"jobID"`
+}
+
+func AddJobHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut {
+		var payload AddJobReqPayload
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
+			return
+		}
+		id := uuid.New()
+		timeString := time.Now().Format(time.RFC3339)
+		newJob := orcaJobs.Job{
+			FileHash:        payload.FileHash,
+			JobId:           id.String(),
+			TimeQueued:      timeString,
+			Status:          "paused",
+			AccumulatedCost: 0,
+			ProjectedCost:   -1,
+			ETA:             -1,
+			PeerId:          payload.PeerId,
+		}
+		orcaJobs.AddJob(newJob)
+		go jobRoutine(payload.FileHash, payload.PeerId)
+		w.WriteHeader(http.StatusOK)
+		response := AddJobResPayload{JobId: newJob.JobId}
+		jsonData, err := json.Marshal(response)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		return
 	}
 }
