@@ -19,12 +19,16 @@ import (
 )
 
 type Client struct {
-	name_map hash.NameMap
+	name_map   hash.NameMap
+	PublicKey  *rsa.PublicKey
+	PrivateKey *rsa.PrivateKey
 }
 
 func NewClient(path string) *Client {
 	return &Client{
-		name_map: *hash.NewNameStore(path),
+		name_map:   *hash.NewNameStore(path),
+		PublicKey:  nil,
+		PrivateKey: nil,
 	}
 }
 
@@ -138,8 +142,12 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walle
 			priceInt, err := strconv.ParseInt(price, 10, 64)
 			if err != nil {
 				fmt.Println(err)
+			} else {
+				if client.PublicKey != nil && client.PrivateKey != nil {
+					SendTransaction(float64(priceInt), ip, string(port), client.PublicKey, client.PrivateKey)
+				}
+				orcaJobs.UpdateJobCost(jobId, int(priceInt))
 			}
-			orcaJobs.UpdateJobCost(jobId, int(priceInt))
 		}
 		if _, err := destFile.Write(data); err != nil {
 			return err
@@ -346,7 +354,7 @@ func (client *Client) getChunkData(ip string, port int32, file_hash string, chun
 			return -1, nil, err
 		}
 		fmt.Printf("\nError: %s\n ", body)
-		return -1, nil, errors.New("http status not ok\n")
+		return -1, nil, errors.New("http status not ok")
 	}
 
 	data := bytes.NewBuffer([]byte{})
