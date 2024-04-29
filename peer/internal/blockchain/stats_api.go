@@ -251,6 +251,73 @@ func getLatestTransactions(w http.ResponseWriter, r *http.Request) {
 }
 func getCompleteTransactions(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
+		dir := "./files/transactions"
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			http.Error(w, "error reading directory", http.StatusInternalServerError)
+			return
+		}
+		type FileWithTime struct {
+			Name     string
+			Modified time.Time
+		}
+		var filesWithTime []FileWithTime
+		for _, file := range files {
+			t, err := time.Parse(time.RFC3339Nano, file.Name())
+			if err != nil {
+				continue
+			}
+			filesWithTime = append(filesWithTime, FileWithTime{Name: file.Name(), Modified: t})
+		}
+		allTransactions := make([]TransactionResponse, 0)
+		for _, file := range filesWithTime {
+			file, err := os.Open("./files/transactions/" + file.Name)
+			if err != nil {
+				http.Error(w, "transaction file does not exist", http.StatusInternalServerError)
+				return
+			}
+			defer file.Close()
+			fileContent, err := io.ReadAll(file)
+			if err != nil {
+				http.Error(w, "Error reading in file", http.StatusInternalServerError)
+				return
+			}
+			var data TransactionFileData
+			err = json.Unmarshal(fileContent, &data)
+			if err != nil {
+				http.Error(w, "Error unmarshaling JSON", http.StatusInternalServerError)
+				return
+			}
+			var transaction Transaction
+			err = json.Unmarshal(data.UnlockedTransaction, &transaction)
+			if err != nil {
+				fmt.Println("Error unmarshalling JSON:", err)
+				return
+			}
+			allTransactions = append(allTransactions, TransactionResponse{
+				Id:       transaction.Uuid,
+				Reciever: "",
+				Amount:   fmt.Sprintf("%f", transaction.Price),
+				Status:   "Success",
+				Reason:   "Auto-Transaction",
+				Date:     transaction.Timestamp,
+			})
+		}
+		response := LatestTransactionResponse{
+			WalletId:     "",
+			Transactions: allTransactions,
+		}
+		jsonData, err := json.Marshal(response)
+		if err != nil {
+			http.Error(w, "Error marshaling JSON", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write(jsonData)
+		if err != nil {
+			http.Error(w, "Error  marshalling JSON", http.StatusInternalServerError)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
