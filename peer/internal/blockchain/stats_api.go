@@ -49,16 +49,22 @@ func getDailyRevenue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+type Revenue struct {
+	Date     string `json:"date"`
+	Earning  int    `json:"earning"`
+	Spending int    `json:"spending"`
+}
+
 func getMonthlyRevenue(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		pubKeyString, err := orcaHash.ExportRsaPublicKeyAsPemStr(publicKey)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
-		totalSent := 0
-		totalReceived := 0
 		orcaStatus.LoadInTransactions()
 		timeThreshold := time.Now().Add(-24 * 30 * time.Hour)
+		hashMap := make(map[string]*Revenue)
 		for _, transaction := range orcaStatus.AllTransactions {
 			timestamp, err := time.Parse(time.RFC3339Nano, transaction.TransactionData.Date)
 			if err != nil {
@@ -66,10 +72,20 @@ func getMonthlyRevenue(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if timestamp.After(timeThreshold) {
-				if transaction.TransactionData.PublicKey == string(pubKeyString) {
-					totalSent += int(transaction.TransactionData.Cost)
+				key := timestamp.Month().String() + "/" + string(timestamp.Day())
+				value, ok := hashMap[key]
+				var rev *Revenue
+				rev = nil
+				if ok {
+					rev = value
 				} else {
-					totalReceived += int(transaction.TransactionData.Cost)
+					rev = &Revenue{Date: key, Earning: 0, Spending: 0}
+					hashMap[key] = rev
+				}
+				if transaction.TransactionData.PublicKey == string(pubKeyString) {
+					rev.Spending += int(transaction.TransactionData.Cost)
+				} else {
+					rev.Earning += int(transaction.TransactionData.Cost)
 				}
 			}
 		}
@@ -85,10 +101,9 @@ func getYearlyRevenue(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
-		totalSent := 0
-		totalReceived := 0
 		orcaStatus.LoadInTransactions()
 		timeThreshold := time.Now().Add(-24 * 365 * time.Hour)
+		hashMap := make(map[string]*Revenue)
 		for _, transaction := range orcaStatus.AllTransactions {
 			timestamp, err := time.Parse(time.RFC3339Nano, transaction.TransactionData.Date)
 			if err != nil {
@@ -96,10 +111,20 @@ func getYearlyRevenue(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			if timestamp.After(timeThreshold) {
-				if transaction.TransactionData.PublicKey == string(pubKeyString) {
-					totalSent += int(transaction.TransactionData.Cost)
+				key := timestamp.Month().String() + "/" + string(timestamp.Day())
+				value, ok := hashMap[key]
+				var rev *Revenue
+				rev = nil
+				if ok {
+					rev = value
 				} else {
-					totalReceived += int(transaction.TransactionData.Cost)
+					rev = &Revenue{Date: key, Earning: 0, Spending: 0}
+					hashMap[key] = rev
+				}
+				if transaction.TransactionData.PublicKey == string(pubKeyString) {
+					rev.Spending += int(transaction.TransactionData.Cost)
+				} else {
+					rev.Earning += int(transaction.TransactionData.Cost)
 				}
 			}
 		}
