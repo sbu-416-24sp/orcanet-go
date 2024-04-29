@@ -63,9 +63,11 @@ func (client *Client) ImportFile(filePath string) error {
 }
 
 type Data struct {
-	Bytes               []byte `json:"bytes"`
-	UnlockedTransaction []byte `json:"transaction"`
-	PublicKey           string `json:"public_key"`
+	Bytes               []byte  `json:"bytes"`
+	UnlockedTransaction []byte  `json:"transaction"`
+	PublicKey           string  `json:"public_key"`
+	Date                string  `json:"date"`
+	Cost                float64 `json:"cost"`
 }
 
 func SendTransaction(price float64, ip string, port string, publicKey *rsa.PublicKey, privateKey *rsa.PrivateKey) {
@@ -76,10 +78,14 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 		fmt.Println("Error sending public key in header:", err)
 		return
 	}
+	currentTime := time.Now()
+	dateTimeString := currentTime.Format(time.RFC3339Nano)
 	data := Data{
 		Bytes:               byteBuffer.Bytes(),
 		UnlockedTransaction: cost,
 		PublicKey:           string(pubKeyString),
+		Date:                dateTimeString,
+		Cost:                price,
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -104,7 +110,11 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 		fmt.Println("Send Request")
 	}
 	defer resp.Body.Close()
-
+	err = os.WriteFile("./files/transactions/"+dateTimeString, jsonData, 0644)
+	if err != nil {
+		fmt.Println("Error writing transaction to file:", err)
+		return
+	}
 }
 func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string, jobId string) error {
 	/*

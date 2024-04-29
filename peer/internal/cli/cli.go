@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	orcaBlockchain "orca-peer/internal/blockchain"
 	orcaClient "orca-peer/internal/client"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
@@ -58,6 +59,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	Client.PublicKey = pubKey
 	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey, passKey, Client, startAPIRoutes)
 	<-serverReady
+	orcaBlockchain.InitBlockchainStats(pubKey)
 	fmt.Println("Welcome to Orcanet!")
 	fmt.Println("Dive In and Explore! Type 'help' for available commands.")
 

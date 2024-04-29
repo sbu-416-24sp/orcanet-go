@@ -35,9 +35,11 @@ type HTTPServer struct {
 }
 
 type TransactionFile struct {
-	Bytes               []byte `json:"bytes"`
-	UnlockedTransaction []byte `json:"transaction"`
-	PublicKey           string `json:"public_key"`
+	Bytes               []byte  `json:"bytes"`
+	UnlockedTransaction []byte  `json:"transaction"`
+	PublicKey           string  `json:"public_key"`
+	Date                string  `json:"date"`
+	Cost                float64 `json:"cost"`
 }
 type Transaction struct {
 	Price     float64 `json:"price"`
@@ -67,7 +69,7 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timestamp := time.Now()
-	timestampStr := timestamp.Format(time.RFC3339)
+	timestampStr := timestamp.Format(time.RFC3339Nano)
 	err = os.WriteFile("./files/transactions/"+timestampStr, body, 0644)
 	if err != nil {
 		fmt.Println("Error writing transaction to file:", err)
@@ -126,6 +128,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
 	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
 	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
+
 	http.ListenAndServe(":"+httpPort, nil)
 }
 

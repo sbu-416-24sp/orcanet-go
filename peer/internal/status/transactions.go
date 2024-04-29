@@ -9,9 +9,11 @@ import (
 )
 
 type Data struct {
-	Bytes               []byte `json:"bytes"`
-	UnlockedTransaction []byte `json:"transaction"`
-	PublicKey           string `json:"public_key"`
+	Bytes               []byte  `json:"bytes"`
+	UnlockedTransaction []byte  `json:"transaction"`
+	PublicKey           string  `json:"public_key"`
+	Date                string  `json:"date"`
+	Cost                float64 `json:"cost"`
 }
 
 type Transaction struct {
