@@ -287,10 +287,6 @@ func getStatsNetwork(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer response.Body.Close()
-			if err != nil {
-				fmt.Println("Error reading response body:", err)
-				return
-			}
 			var responseData SpeedEndpointResponse
 			err = json.NewDecoder(response.Body).Decode(&responseData)
 			if err != nil {
