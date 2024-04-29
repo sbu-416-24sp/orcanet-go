@@ -13,6 +13,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 var publicKey *rsa.PublicKey
@@ -299,8 +301,11 @@ func getStatsNetwork(w http.ResponseWriter, r *http.Request) {
 		elapsedTime := endTime.Sub(startTime)
 		outgoingKbPerSecond := float64(data.Len()) / (elapsedTime.Seconds() * 1024)
 		incomingKbPerSecond := float64(totalIncomingTime / float64(testIterations))
+
+		newUUID := uuid.New()
+		uuidString := newUUID.String()
 		statsResponse := StatsResponse{
-			Id:            "",
+			Id:            uuidString,
 			PublicKey:     "",
 			IncomingSpeed: fmt.Sprintf("%f", incomingKbPerSecond),
 			OutgoingSpeed: fmt.Sprintf("%f", outgoingKbPerSecond),

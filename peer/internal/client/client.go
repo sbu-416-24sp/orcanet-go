@@ -181,6 +181,7 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walle
 			}
 		}
 	}
+	orcaJobs.UpdateJobStatus(jobId, "finished")
 
 	fmt.Printf("\nFile %s downloaded successfully!\n> ", file_hash)
 	return nil
