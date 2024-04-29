@@ -8,20 +8,27 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	orcaBlockchain "orca-peer/internal/blockchain"
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"os"
-	"strconv"
 	"path/filepath"
+	"strconv"
+	"time"
 )
 
 type Client struct {
-	name_map hash.NameMap
+	name_map   hash.NameMap
+	PublicKey  *rsa.PublicKey
+	PrivateKey *rsa.PrivateKey
 }
 
 func NewClient(path string) *Client {
 	return &Client{
-		name_map: *hash.NewNameStore(path),
+		name_map:   *hash.NewNameStore(path),
+		PublicKey:  nil,
+		PrivateKey: nil,
 	}
 }
 
@@ -56,9 +63,11 @@ func (client *Client) ImportFile(filePath string) error {
 }
 
 type Data struct {
-	Bytes               []byte `json:"bytes"`
-	UnlockedTransaction []byte `json:"transaction"`
-	PublicKey           string `json:"public_key"`
+	Bytes               []byte  `json:"bytes"`
+	UnlockedTransaction []byte  `json:"transaction"`
+	PublicKey           string  `json:"public_key"`
+	Date                string  `json:"date"`
+	Cost                float64 `json:"cost"`
 }
 
 func SendTransaction(price float64, ip string, port string, publicKey *rsa.PublicKey, privateKey *rsa.PrivateKey) {
@@ -69,10 +78,14 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 		fmt.Println("Error sending public key in header:", err)
 		return
 	}
+	currentTime := time.Now()
+	dateTimeString := currentTime.Format(time.RFC3339Nano)
 	data := Data{
 		Bytes:               byteBuffer.Bytes(),
 		UnlockedTransaction: cost,
 		PublicKey:           string(pubKeyString),
+		Date:                dateTimeString,
+		Cost:                price,
 	}
 	jsonData, err := json.Marshal(data)
 	if err != nil {
@@ -97,9 +110,13 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 		fmt.Println("Send Request")
 	}
 	defer resp.Body.Close()
-
+	err = os.WriteFile("./files/transactions/"+dateTimeString, jsonData, 0644)
+	if err != nil {
+		fmt.Println("Error writing transaction to file:", err)
+		return
+	}
 }
-func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error {
+func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string, jobId string) error {
 	/*
 		file_hash := client.name_map.GetFileHash(filename)
 		if file_hash == "" {
@@ -127,7 +144,21 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error
 		if err != nil {
 			return err
 		}
-
+		err = client.sendTransactionFee(price, walletAddress, passKey)
+		if err != nil {
+			return err
+		}
+		if jobId != "" {
+			priceInt, err := strconv.ParseInt(price, 10, 64)
+			if err != nil {
+				fmt.Println(err)
+			} else {
+				if client.PublicKey != nil && client.PrivateKey != nil {
+					SendTransaction(float64(priceInt), ip, string(port), client.PublicKey, client.PrivateKey)
+				}
+				orcaJobs.UpdateJobCost(jobId, int(priceInt))
+			}
+		}
 		if _, err := destFile.Write(data); err != nil {
 			return err
 		}
@@ -136,7 +167,21 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string) error
 		if chunkIndex == maxChunk {
 			break
 		}
+		if jobId != "" {
+			status := orcaJobs.GetJobStatus(jobId)
+			if status == "terminated" {
+				return nil
+			} else if status == "paused" {
+				for {
+					time.Sleep(10 * time.Second)
+					if orcaJobs.GetJobStatus(jobId) != "paused" {
+						break
+					}
+				}
+			}
+		}
 	}
+	orcaJobs.UpdateJobStatus(jobId, "finished")
 
 	fmt.Printf("\nFile %s downloaded successfully!\n> ", file_hash)
 	return nil
@@ -189,7 +234,8 @@ func (client *Client) getDirectory(ip string, port int32, dir_tree map[string]an
 			if err != nil {
 				return err
 			}
-			err = client.GetFileOnce(ip, port, path)
+			// need to fix to match new blockchain requirements
+			err = client.GetFileOnce(ip, port, path, "", "", "", "")
 			if err != nil {
 				return err
 			}
@@ -297,13 +343,19 @@ func (client *Client) storeData(ip, port, filename string, fileData *FileData) (
 	return string(body), nil
 }
 
-//int return value will be the length of chunk indexes from response header
+func (client *Client) sendTransactionFee(coins string, address string, senderWalletPass string) error {
+	err := orcaBlockchain.SendToAddress(coins, address, senderWalletPass)
+	return err
+}
+
+// int return value will be the length of chunk indexes from response header
 func (client *Client) getChunkData(ip string, port int32, file_hash string, chunk int) (int, []byte, error) {
 	resp, err := http.Get(fmt.Sprintf("http://%s:%d/get-file?hash=%s&chunk-index=%d", ip, port, file_hash, chunk))
 	if err != nil {
 		fmt.Printf("Error: %s\n", err)
 		return -1, nil, err
 	}
+
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -313,7 +365,7 @@ func (client *Client) getChunkData(ip string, port int32, file_hash string, chun
 			return -1, nil, err
 		}
 		fmt.Printf("\nError: %s\n ", body)
-		return -1, nil, errors.New("http status not ok\n")
+		return -1, nil, errors.New("http status not ok")
 	}
 
 	data := bytes.NewBuffer([]byte{})

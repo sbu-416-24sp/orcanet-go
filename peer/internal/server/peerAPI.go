@@ -23,7 +23,7 @@ func getAllPeers(w http.ResponseWriter, r *http.Request) {
 			writeStatusUpdate(w, "Failed to convert all Peer JSON Data into a string")
 			return
 		}
-		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(jsonPeers)
 	} else {
@@ -44,7 +44,7 @@ func getPeer(w http.ResponseWriter, r *http.Request) {
 				writeStatusUpdate(w, "Failed to convert Peer JSON Data into a string")
 				return
 			}
-			w.Header().Set("Content-Type", "application/octet-stream")
+			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			w.Write(jsonPeer)
 		} else {
