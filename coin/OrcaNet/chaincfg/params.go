@@ -27,7 +27,7 @@ var (
 	// have for the main network.  It is the value 2^224 - 1.
 	mainPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 224), bigOne)
 
-	orcaNetPowLimit = new(big.Int).Sub(new(big.Int).Lsh(bigOne, 254), bigOne)
+	freshNetPowLimit = mainPowLimit
 
 	// regressionPowLimit is the highest proof of work value a Bitcoin block
 	// can have for the regression test network.  It is the value 2^255 - 1.
@@ -537,39 +537,55 @@ var RegressionNetParams = Params{
 	HDCoinType: 1,
 }
 
-// OrcaNetParams defines the network parameters for the OrcaNet network.
-var OrcaNetParams = Params{
-	Name:        "orcanet",
-	Net:         wire.OrcaNet,
-	DefaultPort: "8444",
-	DNSSeeds:    []DNSSeed{},
+
+var FreshNetParams = Params{
+	Name: "freshnet",
+	Net:  wire.FreshNet,
+	// need to define a port num so that peers can communicate in different networks by
+	// looking at the port number
+	DefaultPort: "41600",
+	// Leaving Seed nodes blank for now
+	DNSSeeds: []DNSSeed{},
 
 	// Chain parameters
-	GenesisBlock:             &orcaNetGenesisBlock,
-	GenesisHash:              &orcaNetGenesisHash,
-	PowLimit:                 mainPowLimit,
-	PowLimitBits:             0x1d00ffff,
-	BIP0034Height:            227931, // 000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
-	BIP0065Height:            388381, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
-	BIP0066Height:            363725, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
+	GenesisBlock: &freshNetGenesisBlock,
+	GenesisHash:  &freshNetGenesisHash,
+	PowLimit:     freshNetPowLimit,
+	// determines how difficult to mine
+	PowLimitBits:  0x1d00ffff,
+	BIP0034Height: 227931, // 000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8
+	BIP0065Height: 388381, // 000000000000000004c2b624ed5d7756c508d90fd0da2c7c679febfa6c4735f0
+	BIP0066Height: 363725, // 00000000000000000379eaa19dce8c9b722d46ae6a57c2f1a988119488b50931
+	// defines the number of confirmations required before newly mined coins can be spent.
+	// Lowering this value reduces the waiting time for miners to spend their rewards, which can incentivize mining
 	CoinbaseMaturity:         1,
 	SubsidyReductionInterval: 210000,
-	TargetTimespan:           time.Hour * 24 * 10, // 10 days
-	TargetTimePerBlock:       time.Minute * 1,     // 10 minutes
-	RetargetAdjustmentFactor: 4,                   // 25% less, 400% more
-	ReduceMinDifficulty:      false,
+	// widens the window for difficulty adjustments.
+	TargetTimespan: time.Hour * 24 * 14, // 14 days
+	// to slow down the block production rate
+	TargetTimePerBlock: time.Minute * 10, // 10 minutes
+
+	// controls how much the difficulty can adjust in each retargeting period.
+	// Lowering this value allows for more significant adjustments,
+	// which can help the network quickly adapt to changes in mining power or difficulty
+	RetargetAdjustmentFactor: 4, // 25% less, 400% more
+	ReduceMinDifficulty:      true,
 	MinDiffReductionTime:     0,
-	GenerateSupported:        false,
+	// can use generate command from RPC to generate blocks in lieu of standard mining procedures
+	GenerateSupported: false,
 
 	// Checkpoints ordered from oldest to newest.
+	// these are specific blocks as the chain grows to maintain stability and security
 	Checkpoints: nil,
 
 	// Consensus rule change deployments.
-	//
 	// The miner confirmation window is defined as:
 	//   target proof of work timespan / target proof of work spacing
 	RuleChangeActivationThreshold: 1916, // 95% of MinerConfirmationWindow
 	MinerConfirmationWindow:       2016, //
+
+	// can leave this as is, unless we want to change the consensus rules
+	// these are rules that everyone must follows to reach an agreeable state of the network
 	Deployments: [DefinedDeployments]ConsensusDeployment{
 		DeploymentTestDummy: {
 			BitNumber: 28,
@@ -630,6 +646,7 @@ var OrcaNetParams = Params{
 	Bech32HRPSegwit: "bc", // always bc for main net
 
 	// Address encoding magics
+	// these are used to determine the type of network for a particular address
 	PubKeyHashAddrID:        0x00, // starts with 1
 	ScriptHashAddrID:        0x05, // starts with 3
 	PrivateKeyID:            0x80, // starts with 5 (uncompressed) or K (compressed)
@@ -637,6 +654,7 @@ var OrcaNetParams = Params{
 	WitnessScriptHashAddrID: 0x0A, // starts with 7Xh
 
 	// BIP32 hierarchical deterministic extended key magics
+	// these are used for different wallet interpolation
 	HDPrivateKeyID: [4]byte{0x04, 0x88, 0xad, 0xe4}, // starts with xprv
 	HDPublicKeyID:  [4]byte{0x04, 0x88, 0xb2, 0x1e}, // starts with xpub
 
@@ -644,6 +662,8 @@ var OrcaNetParams = Params{
 	// address generation.
 	HDCoinType: 0,
 }
+
+ 
 
 // TestNet3Params defines the network parameters for the test Bitcoin network
 // (version 3).  Not to be confused with the regression test network, this

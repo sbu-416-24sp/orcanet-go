@@ -12,41 +12,59 @@
      "io"
  )
 
- const (
+
+// we need to get the execPath so that we can run the other executables regardless what the PWD is
+func getExePath() (string, error) {
+    exePath, err := os.Executable()
+    if err != nil {
+        fmt.Println("Could not find OrcaNetAPIServer executable")
+        return "", err
+    }
+    return exePath, nil
+}
+
+const (
      orcaNetPath string = "./OrcaNet/OrcaNet"
      btcctlPath string = "./OrcaNet/cmd/btcctl/btcctl"
      orcaWalletPath string = "./OrcaWallet/btcwallet"
  )
 
 var cmdProcess *exec.Cmd
-func Start(params ...string) (*exec.Cmd, error) {
-    _, err := os.Stat(orcaNetPath)
+
+func Start(params ...string) error {
+    exePath, err := getExePath();
+    if err != nil {
+        return err;
+    }
+    var orcaNetFullPath = filepath.Join(exePath, "..", "..", orcaNetPath)
+    _, err = os.Stat(orcaNetFullPath)
     if os.IsNotExist(err) {
         fmt.Println("Cannot find OrcaNet executable")
-        return nil, err
+        return err
     }
 
-    cmdProcess = exec.Command(orcaNetPath, params...)
+    cmdProcess = exec.Command(orcaNetFullPath, params...)
 
     stdout, err := cmdProcess.StdoutPipe()
     if err != nil {
-        return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
+        return fmt.Errorf("failed to create stdout pipe: %w", err)
     }
     stderr, err := cmdProcess.StderrPipe()
     if err != nil {
-        return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
+        return fmt.Errorf("failed to create stderr pipe: %w", err)
     }
 
     fmt.Println("Start OrcaNet with params: ", params)
     if err := cmdProcess.Start();  err != nil {
         fmt.Println("Failed to start OrcaNet:", err)
-        return nil, err
+        return err
     }
     fmt.Println("OrcaNet started successfully")
     go printOutput(stdout)
     go printOutput(stderr)
 
-    return cmdProcess, nil
+
+    return nil
 }
 
 
@@ -81,22 +99,28 @@ func Stop() error {
 }
 
 //startOrcaWallet: starts the OrcaWallet
-func StartOrcaWallet() (*exec.Cmd, error) {
+func StartOrcaWallet() error {
+    // get path relative to executable so it can be run anywhere and not just from the location of the exe
+    exePath, err := getExePath();
+    if err != nil {
+        return err;
+    }
+    var walletFullPath = filepath.Join(exePath, "..", "..", orcaWalletPath)
     // check for the existence of the executable 
-    _, err := os.Stat(orcaWalletPath)
+    _, err = os.Stat(walletFullPath)
     if os.IsNotExist(err) {
         fmt.Println("Cannot find Orcawallet executable")
-        return nil, err
+        return err
     }
 
-    cmd := exec.Command(orcaWalletPath)
+    cmd := exec.Command(walletFullPath)
     if err := cmd.Start(); err != nil {
         fmt.Println(err)
         fmt.Println("failed to start wallet executable")
-        return nil, err
+        return nil
     }
     fmt.Println("Wallet started successfully")
-    return cmd, err
+    return nil
 }
 // getBtcdConfFilePath returns the file path for btcd.conf based on the user's OS
 func getBtcdConfFilePath() string {
@@ -170,12 +194,24 @@ func CallBtcctlCmd(cmdStr string) (string, error) {
     if err != nil {
         return "", fmt.Errorf("failed to get rpc info")
     }
-    fmt.Println(rpcInfo)
+    // get the bttcl full path
+    exePath, err := getExePath()
+    if err != nil {
+        fmt.Println("error finding APIServer exec")
+        return "", err
+    }
+    
+    var btcctlFullPath = filepath.Join(exePath, "..", "..", btcctlPath)
+    _, err = os.Stat(btcctlFullPath)
+    if os.IsNotExist(err) {
+        fmt.Println("Error finding btcctl full path")
+        return "", err 
+    }
     params :=  strings.Split(cmdStr, " ") 
     params = append(params, "--rpcuser=" + strings.TrimSpace(rpcInfo[0]) + "=", "--rpcpass=" + strings.TrimSpace(rpcInfo[1]) + "=")
 
     fmt.Println(params)
-    cmd := exec.Command(btcctlPath, params...)
+    cmd := exec.Command(btcctlFullPath, params...)
     // get the stdout of cmd, CAN HANG but shouldn't be a problem in a btcctl command
     stdout, err := cmd.CombinedOutput() 
     if err != nil {

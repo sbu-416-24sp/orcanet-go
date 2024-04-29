@@ -9,6 +9,12 @@ import (
 	"strconv"
 	"encoding/json"
 )
+
+type Block struct {
+    Hash   string `json:"hash"`
+    Height int    `json:"height"`
+}
+
 // some basic endpoints
 
 // getRoot: the root endpoint ('/')
@@ -51,7 +57,46 @@ func getBalance(w http.ResponseWriter, r *http.Request) {
     fmt.Println(err)
     io.WriteString(w, stdout)
 }
+// getPeerInfo: gets the peer info 
+func getPeerInfo(w http.ResponseWriter, r *http.Request) {
+    fmt.Println("Get peer endpoint")
+    const command string = "getpeerinfo"
+    stdout, err := manageOrcaNet.CallBtcctlCmd(command)
+    fmt.Println(err)
+    io.WriteString(w, stdout)
+}
 
+// getBestBlock: gets the best block
+func getBestBlock(w http.ResponseWriter, r *http.Request) {
+    fmt.Println("Get best block endpoint")
+    const command string = "getbestblock"
+    stdout, err := manageOrcaNet.CallBtcctlCmd(command)
+    fmt.Println(err)
+    io.WriteString(w, stdout)
+}
+
+// getBestBlockInfo: gets the best block info
+func getBestBlockInfo(w http.ResponseWriter, r *http.Request) {
+    // get bestblock hash then run getblock on it
+    fmt.Println("Get best block info endpoint")
+    const command string = "getbestblock"
+    stdout, err := manageOrcaNet.CallBtcctlCmd(command)
+    fmt.Println(err)
+    // get the hash of the best block
+    var block Block
+
+    // Unmarshal the JSON data into the block variable
+    err = json.Unmarshal([]byte(stdout), &block)
+    if err != nil {
+        fmt.Println(err)
+        http.Error(w, "Error accessing JSON data", http.StatusInternalServerError)
+    }
+
+    getBlockCommand := "getblock " + block.Hash
+    stdout, err = manageOrcaNet.CallBtcctlCmd(getBlockCommand)
+    fmt.Println(err)
+    io.WriteString(w, stdout)
+}
 // mine: endpoint to start mining, mining rewards go to the associated wallet on this node 
 func mine(w http.ResponseWriter, r *http.Request) {
     fmt.Println("Mine endpoint")
@@ -73,8 +118,7 @@ func mine(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "failed to kill original OrcaNet instance to start mining", http.StatusInternalServerError)
         return 
     }
-    _, err = manageOrcaNet.Start(orcaNetParams...);
-    if err != nil {
+    if err := manageOrcaNet.Start(orcaNetParams...); err != nil {
         fmt.Println("failed to start mining:", err)
         http.Error(w, "failed to start mining", http.StatusInternalServerError)
         return

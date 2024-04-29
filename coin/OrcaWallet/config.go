@@ -362,7 +362,7 @@ func loadConfig() (*config, []string, error) {
 	// Choose the active network params based on the selected network. 
 	// Multiple networks can't be selected simultaneously.
 	numNets := 0
-	activeNet = &netparams.OrcaNetParams
+	activeNet = &netparams.FreshNetParams
 	numNets++
 	if cfg.TestNet3 {
 		activeNet = &netparams.TestNet3Params
