@@ -1,6 +1,7 @@
 package blockchain
 
 import (
+	"bytes"
 	"crypto/rsa"
 	"encoding/json"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	orcaStatus "orca-peer/internal/status"
 	"os"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -253,14 +255,114 @@ func getCompleteTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
+
+type StatsRequest struct {
+	PublicKey string `json:"pub_key"`
+}
+type StatsResponse struct {
+	Id            string `json:"_id"`
+	PublicKey     string `json:"pub_key"`
+	IncomingSpeed string `json:"incoming_speed"`
+	OutgoingSpeed string `json:"outgoing_speed"`
+}
+
 func getStatsNetwork(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
+		// Decode the JSON payload from the request body into a MyRequest struct
+		var requestData StatsRequest
+		err := json.NewDecoder(r.Body).Decode(&requestData)
+		if err != nil {
+			http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+			return
+		}
+		byteString := strings.Repeat("a", 8192)
+		data := strings.NewReader(byteString)
+		startTime := time.Now()
+		totalIncomingTime := float64(0)
+		testIterations := 10
+		for i := 0; i < testIterations; i++ {
+			response, err := http.Post("http://localhost:8082/speed/sender", "application/json", bytes.NewBuffer([]byte(byteString)))
+			if err != nil {
+				fmt.Println("Error sending POST request:", err)
+				return
+			}
+			defer response.Body.Close()
+			if err != nil {
+				fmt.Println("Error reading response body:", err)
+				return
+			}
+			var responseData SpeedEndpointResponse
+			err = json.NewDecoder(response.Body).Decode(&responseData)
+			if err != nil {
+				fmt.Println("Error decoding JSON:", err)
+				return
+			}
+			totalIncomingTime += responseData.KbPerSecond
+		}
+		endTime := time.Now()
+		elapsedTime := endTime.Sub(startTime)
+		outgoingKbPerSecond := float64(data.Len()) / (elapsedTime.Seconds() * 1024)
+		incomingKbPerSecond := float64(totalIncomingTime / float64(testIterations))
+		statsResponse := StatsResponse{
+			Id:            "",
+			PublicKey:     "",
+			IncomingSpeed: fmt.Sprintf("%f", incomingKbPerSecond),
+			OutgoingSpeed: fmt.Sprintf("%f", outgoingKbPerSecond),
+		}
+		jsonData, err := json.Marshal(statsResponse)
+		if err != nil {
+			http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+		_, err = w.Write(jsonData)
+		if err != nil {
+			http.Error(w, "Error writing response", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 }
+
+type SpeedEndpointResponse struct {
+	KbPerSecond float64 `json:"KbPerSecond"`
+}
+
+func speedEndpointReceiver(w http.ResponseWriter, r *http.Request) {
+	startTime := time.Now()
+	buffer := make([]byte, 1024)
+	totalBytesRead := 0
+	for {
+		n, err := r.Body.Read(buffer)
+		totalBytesRead += n
+		if err != nil {
+			break
+		}
+	}
+
+	endTime := time.Now()
+	elapsedTime := endTime.Sub(startTime)
+	bytesPerSecond := float64(totalBytesRead) / (elapsedTime.Seconds() * 1024)
+	data := SpeedEndpointResponse{
+		KbPerSecond: bytesPerSecond,
+	}
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		http.Error(w, "Error encoding JSON", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(jsonData)
+	if err != nil {
+		http.Error(w, "Error writing response", http.StatusInternalServerError)
+		return
+	}
+}
+
 func InitBlockchainStats(publicKey *rsa.PublicKey) {
 	http.HandleFunc("/wallet/revenue/daily", getDailyRevenue)
 	http.HandleFunc("/wallet/revenue/monthly", getMonthlyRevenue)
@@ -269,5 +371,7 @@ func InitBlockchainStats(publicKey *rsa.PublicKey) {
 	http.HandleFunc("/wallet/transactions/latest", getLatestTransactions)
 	http.HandleFunc("/wallet/revenue/complete", getCompleteTransactions)
 
-	http.HandleFunc("/wallet/revenue/yearly", getStatsNetwork)
+	http.HandleFunc("/stats/network", getStatsNetwork)
+
+	http.HandleFunc("/speed/sender", speedEndpointReceiver)
 }
