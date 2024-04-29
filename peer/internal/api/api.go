@@ -2,12 +2,11 @@ package api
 
 import (
 	"crypto/rsa"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	orcaCLI "orca-peer/internal/cli"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
@@ -123,43 +122,51 @@ type HashResponse struct {
 	Hash string `json:"hash"`
 }
 
+type UploadFileReq struct {
+	FilePath string `json:"filePath"`
+	Price    int64  `json:"price"`
+}
+
 func uploadFile(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost {
-		sourceFile, handler, err := r.FormFile("file")
-		if err != nil {
-			http.Error(w, "Unable to get file from form", http.StatusBadRequest)
+		var payload UploadFileReq
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
 			return
 		}
-		fileContent, err := io.ReadAll(sourceFile)
+		fileName := filepath.Base(payload.FilePath)
+		hashKey, _, err := orcaHash.SaveChunkedFile(payload.FilePath, fileName)
 		if err != nil {
-			http.Error(w, "Unable to read file", http.StatusInternalServerError)
+			http.Error(w, "Unable to create chunked file, maybe filepath doesnt exist?", http.StatusInternalServerError)
+			return
+		}
+
+		sourceFile, err := os.Open(payload.FilePath)
+		if err != nil {
+			fmt.Println("Error opening source file:", err)
 			return
 		}
 		defer sourceFile.Close()
-		hash := sha256.Sum256(fileContent)
-		hexHash := hex.EncodeToString(hash[:])
-		destinationFilePath := "./files/" + hexHash
-		destinationFile, err := os.Create(destinationFilePath)
+		destinationFile, err := os.Create("./files/" + fileName)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			writeStatusUpdate(w, "Cannot create the file to store base64 data.")
+			fmt.Println("Error creating destination file:", err)
 			return
 		}
 		defer destinationFile.Close()
-		_, err = sourceFile.Seek(0, 0)
-		if err != nil {
-			http.Error(w, "Unable to reset file read cursor", http.StatusInternalServerError)
-			return
-		}
 		_, err = io.Copy(destinationFile, sourceFile)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			writeStatusUpdate(w, "Unable to copy base64 data.")
+			fmt.Println("Error copying file:", err)
 			return
 		}
-		fmt.Fprintf(w, "File %s uploaded successfully\n", handler.Filename)
-		// Create a JSON response containing the hash
-		response := HashResponse{Hash: hexHash}
+
+		err = server.SetupRegisterFile(payload.FilePath, fileName, payload.Price, orcaCLI.Ip, int32(orcaCLI.Port))
+		if err != nil {
+			http.Error(w, "Unable to store file on DHT", http.StatusInternalServerError)
+			return
+		}
+		response := HashResponse{Hash: hashKey}
 		jsonResponse, err := json.Marshal(response)
 		if err != nil {
 			http.Error(w, "Unable to marshal JSON", http.StatusInternalServerError)

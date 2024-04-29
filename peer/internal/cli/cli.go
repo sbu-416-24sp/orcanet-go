@@ -26,7 +26,8 @@ import (
 )
 
 var (
-	ip     string
+	Ip     string
+	Port   int64
 	Client *orcaClient.Client
 )
 
@@ -53,7 +54,12 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		fmt.Println("Unable to establish user IP, please try again")
 		return
 	}
-	ip = locationJson["ip"].(string)
+	Ip = locationJson["ip"].(string)
+	Port, err = strconv.ParseInt(httpPort, 10, 64)
+	if err != nil {
+		fmt.Println("Error parsing in port: must be a integer.", err)
+		return
+	}
 	Client = orcaClient.NewClient("files/names/")
 	Client.PrivateKey = privKey
 	Client.PublicKey = pubKey
@@ -148,12 +154,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					fmt.Println("Error parsing in cost per MB: must be a int64", err)
 					continue
 				}
-				port, err := strconv.ParseInt(httpPort, 10, 64)
-				if err != nil {
-					fmt.Println("Error parsing in port: must be a integer.", err)
-					continue
-				}
-				err = server.SetupRegisterFile(filePath, fileName, costPerMB, ip, int32(port))
+				err = server.SetupRegisterFile(filePath, fileName, costPerMB, Ip, int32(Port))
 				if err != nil {
 					fmt.Printf("Unable to register file on DHT: %s", err)
 				} else {
