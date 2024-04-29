@@ -49,8 +49,8 @@ var testNet3Params = params{
 }
 
 
-var orcaNetParams = params{
-	Params:  &chaincfg.OrcaNetParams,
+var FreshNetParams = params{
+	Params:  &chaincfg.FreshNetParams,
 	rpcPort: "8334",
 }
 

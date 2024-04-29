@@ -25,8 +25,8 @@ var MainNetParams = Params{
 	RPCServerPort: "8332",
 }
 
-var OrcaNetParams = Params {
-	Params: &chaincfg.OrcaNetParams,
+var FreshNetParams = Params {
+	Params: &chaincfg.FreshNetParams,
 	RPCClientPort: "8334",
 	RPCServerPort: "8332",
 }

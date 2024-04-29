@@ -96,10 +96,9 @@ var regTestGenesisHash = chainhash.Hash([chainhash.HashSize]byte{ // Make go vet
 	0xc7, 0xb2, 0xb7, 0x3c, 0xf1, 0x88, 0x91, 0x0f,
 })
 
-// regTestGenesisMerkleRoot is the hash of the first transaction in the genesis
-// block for the regression test network.  It is the same as the merkle root for
-// the main network.
-var regTestGenesisMerkleRoot = genesisMerkleRoot
+// freshNetGenesisMerkleRoot is the hash of the first transaction in the genesis block
+// for the fresh network.
+var freshNetGenesisMerkleRoot = genesisMerkleRoot
 
 // regTestGenesisBlock defines the genesis block of the block chain which serves
 // as the public transaction ledger for the regression test network.
@@ -126,14 +125,16 @@ var testNet3GenesisHash = chainhash.Hash([chainhash.HashSize]byte{ // Make go ve
 
 
 /** orcaNetGenesisBlock defines the genesis block of the block chain which serves as the **/
-var orcaNetGenesisBlock = wire.MsgBlock{
+var freshNetGenesisBlock = wire.MsgBlock{
 	Header: wire.BlockHeader{
 		Version:    1,
-		PrevBlock:  chainhash.Hash{},         //
-		MerkleRoot: genesisMerkleRoot,        //
-		Timestamp:  time.Unix(1701599110, 0), // 2024-02-26 13:31:50 -0500 EST
-		Bits:       0x1d00ffff,               // 486604799 [00000000ffff
-		Nonce:      0x00000000,               // 2083236893
+		PrevBlock:  chainhash.Hash{},
+		MerkleRoot: freshNetGenesisMerkleRoot,
+		Timestamp:  time.Unix(1701599110, 0), // 2024-02-21 18:58:30 +0000 UTC
+		Bits:       0x207fffff,
+		// nonce can be any number, the miners will modify it anyways so that it satisfies
+		// the target difficulty set by Bits
+		Nonce: 0x00000000,
 	},
 	Transactions: []*wire.MsgTx{&genesisCoinbaseTx},
 }
@@ -142,12 +143,11 @@ var orcaNetGenesisBlock = wire.MsgBlock{
 
 // c1 98 d0 ca be 9a 7d ba a8 6a 80 96 a8 5a f3 51 df cd ce 40 be 3f f3 26 55 4b 04 7e 01 a4 4e bc
 // orcanet hash 
-var orcaNetGenesisHash = chainhash.Hash([chainhash.HashSize]byte{
-    // The bytes of the hash should be listed in reverse order
-    0xbc, 0x4e, 0xa4, 0x01, 0x7e, 0x04, 0x4b, 0x55,
-    0x26, 0xf3, 0x3f, 0xbe, 0x40, 0xce, 0xcd, 0xdf,
-    0x51, 0xf3, 0x5a, 0xa8, 0x96, 0x80, 0x6a, 0xa8,
-    0xba, 0x7d, 0x9a, 0xbe, 0xca, 0xd0, 0x98, 0xc1,
+var freshNetGenesisHash = chainhash.Hash([chainhash.HashSize]byte{ // Make go vet happy.
+	0xa5, 0xf3, 0x5e, 0xef, 0x17, 0x0d, 0x40, 0xc1,
+	0x2a, 0x06, 0x97, 0xd2, 0x7d, 0x31, 0x49, 0xb0,
+	0x91, 0x35, 0xa7, 0x4b, 0xff, 0x99, 0x10, 0xb0,
+	0xb6, 0xbb, 0xdb, 0xd1, 0x3c, 0xa5, 0x92, 0xe1,
 })
 
 // testNet3GenesisMerkleRoot is the hash of the first transaction in the genesis
@@ -196,6 +196,11 @@ var simNetGenesisBlock = wire.MsgBlock{
 	},
 	Transactions: []*wire.MsgTx{&genesisCoinbaseTx},
 }
+
+// regTestGenesisMerkleRoot is the hash of the first transaction in the genesis
+// block for the regression test network.  It is the same as the merkle root for
+// the main network.
+var regTestGenesisMerkleRoot = genesisMerkleRoot
 
 // sigNetGenesisHash is the hash of the first block in the block chain for the
 // signet test network.

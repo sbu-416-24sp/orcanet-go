@@ -182,7 +182,7 @@ const (
 	// SimNet represents the simulation test network.
 	SimNet BitcoinNet = 0x12141c16
 
-	OrcaNet BitcoinNet = 0xe01591ea
+	FreshNet BitcoinNet = 0xe01591ea
 )
 
 // bnStrings is a map of bitcoin networks back to their constant names for
@@ -192,7 +192,7 @@ var bnStrings = map[BitcoinNet]string{
 	TestNet:  "TestNet",
 	TestNet3: "TestNet3",
 	SimNet:   "SimNet",
-	OrcaNet: "OrcaNet",
+	FreshNet: "FreshNet",
 }
 
 // String returns the BitcoinNet in human-readable form.

@@ -169,7 +169,7 @@ type config struct {
 	SigNet               bool          `long:"signet" description:"Use the signet test network"`
 	SigNetChallenge      string        `long:"signetchallenge" description:"Connect to a custom signet network defined by this challenge instead of using the global default signet test network -- Can be specified multiple times"`
 	SigNetSeedNode       []string      `long:"signetseednode" description:"Specify a seed node for the signet network instead of using the global default signet network seed nodes"`
-	OrcaNet 			 bool          `long:"orcanet" description:"Use the orca test network"`
+	Freshnet 			 bool          `long:"freshnet" description:"Use the fresh test network"`
 	TestNet3             bool          `long:"testnet" description:"Use the test network"`
 	TorIsolation         bool          `long:"torisolation" description:"Enable Tor stream isolation by randomizing user credentials for each connection."`
 	TrickleInterval      time.Duration `long:"trickleinterval" description:"Minimum time between attempts to send new inventory to a connected peer"`
@@ -553,9 +553,9 @@ func loadConfig() (*config, []string, error) {
 		numNets++
 		activeNetParams = &testNet3Params
 	}
-	if cfg.OrcaNet {
+	if cfg.Freshnet {
 		numNets++
-		activeNetParams = &orcaNetParams
+		activeNetParams = &FreshNetParams
 	}
 	if cfg.RegressionTest {
 		numNets++
