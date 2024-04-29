@@ -1,29 +1,16 @@
 package client
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
 	pb "orca-peer/internal/fileshare"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
-
-func RequestFileFromMarket(client pb.FileShareClient, fileDesc *pb.CheckHoldersRequest) *pb.HoldersResponse {
-	log.Printf("Requesting IP For File (%s)", fileDesc.FileHash)
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	holders, err := client.CheckHolders(ctx, fileDesc)
-	if err != nil {
-		log.Fatalf("client.requestFileStorage failed: %v", err)
-	}
-	return holders
-}
 
 func RequestFileFromProducer(baseURL string, filename string) bool {
 	encodedParams := url.Values{}
@@ -57,24 +44,4 @@ func DialRPC(serverAddr *string) pb.FileShareClient {
 	defer conn.Close()
 	client := pb.NewFileShareClient(conn)
 	return client
-}
-
-func runRecordTransaction(client pb.FileShareClient, transaction *pb.FileRequestTransaction) *pb.TransactionACKResponse {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	ackResponse, err := client.RecordFileRequestTransaction(ctx, transaction)
-	if err != nil {
-		log.Fatalf("client.RecordFileRequestTransaction failed: %v", err)
-	}
-	log.Printf("ACK Response: %v", ackResponse)
-	return ackResponse
-}
-
-func RecordTransactionWrapper(client pb.FileShareClient, transaction *pb.FileRequestTransaction) {
-	var ack = runRecordTransaction(client, transaction)
-	if ack.IsSuccess {
-		fmt.Printf("[Server]: Successfully recorded transaction in hash: %v", ack.BlockHash)
-	} else {
-		fmt.Println("[Server]: Unable to record transaction in blockchain")
-	}
 }

@@ -1,37 +1,26 @@
 # Peer Node
 
-## Basic Functionality
+## Installation
 
-* Retrieving
-    1) Find addresses corresponding with a specific file hash inside the DHT
-    2) Connect through HTTP with the cheapest option
-    3) Recieve chunks from the HTTP server
-        1) If the file is small (< 4KB), the entire transaction is done in one go
-        2) Otherwise, files are sent in chunks
-            1) A signed transaction must be sent to the sender
-    4) Close connection
-    5) Add file to imported folder inside files directory
+* Make sure golang is installed: The version used for this project is 1.21.4
+* Information about installing proto buffer compiler is found [HERE](https://grpc.io/docs/protoc-installation/)
 
-* Storing
-    1) Hash the file content that you are trying to store
-    2) Send a request to store the file in to the DHT
-    3) Make sure file is inside the stored folder inside files directory
-    4) Accept/Decline any requests for said file, or set the default behavior
-    5) Send all microtransactions to blockchain once everything is done
+The basic steps are:
 
+```bash
 
-## Assumptions
+$ apt install -y protobuf-compiler
 
-1) Each consumer/producer has their own IP address
+$ go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28
 
-2) Producer sets up local HTTP server
+$ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 
-3) Consumer can fetch document from producer's local HTTP server
+$ export PATH="$PATH:$(go env GOPATH)/bin"
 
 
 ## Running
 
-First generate the gRPC files for GO. Make sure you are in the root of the project and run the command below.
+First generate the gRPC files for GO. Make sure you are in the peer folder of the project and run the command below.
 
 ``` bash
 
@@ -43,56 +32,48 @@ $ protoc --go_out=./internal/fileshare \
     file_share.proto
 ```
 
-GO Version: 1.21.4
+Second, make sure you create the executable for the bitcoin nodes. It can be done from the root directory as follows:
 
 ```bash
+
+$ cd coin
+
+$ make
+
+```
+
+Finally, return the the peer folder and run make.
+
+```bash
+
+$ cd ../peer
 
 $ make all
 
 ```
 
+This will start up the peer node. You should see output in the terminal. You will need to enter in <i>three<i> numbers into the terminal before the peer node is fully running. These three numbers will be the port numbers used by the peer node to connect with various services. 
+
 ## CLI interface
 
-Requesting a file:
-
-```bash
-$ get [ip] [port] [filename]
-```
-
-Storing a file:
-
-```bash
-$ store [ip] [address] [filename]
-```
-
-Putting a key inside DHT
+Get a file from the DHT. You should pass a specific hash.
 
 ```bash
 
-$ putKey [key] [value]
+$ get [fileHash] 
 
 ```
 
-Getting a key inside DHT
+Storing a file in the DHT for a given price. You should pass ONLY the file name, given the file is in the files folder (inside peers).
 
 ```bash
-
-$ getKey [key]
-
+$ store [filename] [amount]
 ```
 
-Import a file:
+Import a file into the files directory. You can pass it any filepath, but if the path is relative. It will be rooted in the ./peer folder. It is best to just use an absolute path.
 
 ```bash
 $ import [filepath]
-```
-
-Complete pipeline for getting a file from DHT:
-
-```bash
-
-$ fileGet [fileHash] 
-
 ```
 
 Send a certain amount of coin to an address
@@ -103,7 +84,7 @@ $ send [amount] [ip]
 
 ```
 
-Hash a file
+Hash a file. Only files inside the files folder can be found. Only pass relative paths. You should not need to hash any files: this should be handled internally.
 
 ```bash
 
@@ -162,30 +143,9 @@ $ exit
 
 Here is all of the routes available on the HTTP server that is started when the peer-node loads. Most routes should return 400 if an issue with the parameters sent by the client did not work, 405 if the wrong method type (GET, POST) was used, 500 if there was an error creating, searching or opening files and 200 if everything is successful. If a response is sent inside of an array, that indicates that at minimum, 0 json objects could be sent but more than 1 json object could also be inside of that json array. If not explicitly stated, the Response Body should be a json object with a single field name "status", explaing the current status of the request. Furthermore, when any response code other than 200 is sent, there should be this same json object sent inside the Response Body.
 
-1. Route /getFile is a POST route. This will send back the data from any file that is found LOCALLY. It will first look in the files folder, then files/requested and finally files/stored. You can send either a filename or a filehash.
-
-Request Body:
-```json
-{
-    "filename": "string",
-    "cid": "string"
-}
-```
-
 ---
 
-2. Route /requestRemoteFile is a POST route. This will request a file from the network via a hash and send the file back to the user. The file, if found, will be stored in files/requested folder.
-
-Request Body:
-```json
-{
-    "cid": "string"
-}
-```
-
----
-
-3. Route /uploadFile is a POST route. This will move a local file, from anywhere on the computer, into the <i>files</i> directory. You should give the absolute path, or a path that is relative to the root directory of the peer node folder.
+1. Route /uploadFile is a POST route. This will move a local file, from anywhere on the computer, into the <i>files</i> directory. You should give the absolute path, or a path that is relative to the root directory of the peer node folder.
 
 Request Body:
 ```json
@@ -196,7 +156,7 @@ Request Body:
 
 ---
 
-4. Route /deleteFile is a POST route. This will delete a file that is stored from within the files folder
+2. Route /deleteFile is a POST route. This will delete a file that is stored from within the files folder
 
 Request Body:
 ```json
@@ -208,7 +168,7 @@ Request Body:
 
 ---
 
-5. Route /getAllFiles is a GET route. This will return a json list of all files that are in the <i>files/</i> directory. This is a list of all files that have been imported by the user from the local machine.
+3. Route /getAllFiles is a GET route. This will return a json list of all files that are in the <i>files/</i> directory. This is a list of all files that have been imported by the user from the local machine.
 
 Request Body: NONE
 
@@ -226,7 +186,7 @@ Response Body:
 
 ---
 
-6. Route /getAllStoredFiles is a GET route. This will return a json list of all files that are in the <i>files/stored</i> directory. This is a list of all files that are being stored by the peer on the network.
+4. Route /getAllStoredFiles is a GET route. This will return a json list of all files that are in the <i>files/stored</i> directory. This is a list of all files that are being stored by the peer on the network.
 
 Request Body: NONE
 
@@ -244,7 +204,7 @@ Response Body:
 
 ---
 
-7. Route /getAllRequestedFiles is a GET route. This will return a json list of all files that are in the <i>files/requested</i> directory. THis a list of all the files requested by the peer.
+5. Route /getAllRequestedFiles is a GET route. This will return a json list of all files that are in the <i>files/requested</i> directory. THis a list of all the files requested by the peer.
 
 Request Body: NONE
 
@@ -262,7 +222,7 @@ Response Body:
 
 ---
 
-8. Route /requestFile/:filename with a GET Request. You will need to pass the name of the file. This is called by the peer-node itself to handle file transfer.
+6. Route /requestFile/:filename with a GET Request. You will need to pass the name of the file. This is called by the peer-node itself to handle file transfer.
 
 Example: GET /requestFile/in.txt
 
@@ -277,7 +237,7 @@ Response Body:
 
 ---
 
-9. Route /storeFile/:filename with a GET Request, similar to the route /requestFile. This is called by the peer-node itself to send market a notice that THIS peer-node is storing a file on this local machine.
+7. Route /storeFile/:filename with a GET Request, similar to the route /requestFile. This is called by the peer-node itself to send market a notice that THIS peer-node is storing a file on this local machine.
 
 Example: GET /requestFile/in.txt
 
@@ -292,9 +252,9 @@ Response Body:
 
 ---
 
-10. Route /sendTransaction with a POST Request, must send the transaction and a signed version of the transaction. The body should be an octet-stream of the json object that is described below in the Request Body.
+8. Route /sendTransaction with a POST Request, must send the transaction and a signed version of the transaction. The body should be an octet-stream of the json object that is described below in the Request Body.
 
-Request Body: NONE
+Request Body: 
 ```json
 {
     "bytes": "bytes[]",
@@ -312,7 +272,7 @@ Response Body:
 
 ---
 
-11. Route /getFileInfo?filename="" is a GET route. This will return the status of a file that was found in the files directory. The filecontent is a base64 string.
+9. Route /getFileInfo?filename="" is a GET route. This will return the status of a file that was found in the files directory. The filecontent is a base64 string.
 
 Request Body: NONE
 
@@ -329,7 +289,7 @@ Response Body:
 
 ---
 
-12. Route /writeFile is a POST route. This is the API route for the uploadfile function. It will take the contents of a file as a base64 string, write it to the specified file.
+10. Route /writeFile is a POST route. This is the API route for the uploadfile function. It will take the contents of a file as a base64 string, write it to the specified file.
 
 Request Body: 
 ```json
@@ -342,7 +302,7 @@ Request Body:
 
 ---
 
-13. Route /updateActivityName is a POST Request. You will update the name of an activity byt providing a NEW name and the activity's id.
+11. Route /updateActivityName is a POST Request. You will update the name of an activity byt providing a NEW name and the activity's id.
 
 Request Body: 
 ```json
@@ -354,7 +314,7 @@ Request Body:
 
 ---
 
-14. Route /removeActivity is a POST Request. It will remove a tracked activity that
+12. Route /removeActivity is a POST Request. It will remove a tracked activity that
 
 Request Body: 
 ```json
@@ -365,7 +325,7 @@ Request Body:
 
 ---
 
-15. Route /getActivities is a GET Request. It will return a list of all activities that are currently being tracked and stored.
+13. Route /getActivities is a GET Request. It will return a list of all activities that are currently being tracked and stored.
 
 Request Body: NONE
 
@@ -386,7 +346,7 @@ Response Body:
 
 ---
 
-16. Route /setActivity is a POST Request. This will add a new activity to the list of activities that is being tracked.
+14. Route /setActivity is a POST Request. This will add a new activity to the list of activities that is being tracked.
 
 Request Body:
 ```json
@@ -403,7 +363,7 @@ Request Body:
 
 ---
 
-17. Route /addPeer is a POST Request. It will add a new peer to the list of peers OUR peer is aware of.
+15. Route /addPeer is a POST Request. It will add a new peer to the list of peers OUR peer is aware of.
 
 Request Body:
 ```json
@@ -419,7 +379,7 @@ Request Body:
 
 ---
 
-17. Route /getPeer is a GET Request. It will get information about a peer, given a peer ID.
+16. Route /getPeer is a GET Request. It will get information about a peer, given a peer ID.
 
 Request Body:
 ```json
@@ -442,7 +402,7 @@ Response Body:
 
 ---
 
-18. Route /getAllPeers is a GET Request. It will get you an array of information about every peer node THIS peer node is aware of. 
+17. Route /getAllPeers is a GET Request. It will get you an array of information about every peer node THIS peer node is aware of. 
 
 Request Body: NONE
 
@@ -527,10 +487,98 @@ Response Body:
 }
 ```
 
+---
 
-## gRPC protocol
+23. Route /hash is a POST Request. It will return the hash of a file. It startes looking for files in the root of the files directory only. The file will need to be in the ./files/ directory in order to be found to be hashed. This can change if needed.
 
-Currently in a state of flux, will be update when anything changes
+Request Body: 
+
+```json
+{
+    "filepath": "string"
+}
+```
+
+Response Body: 
+
+```json
+{
+    "hash": "string"
+}
+```
+
+---
+
+24. Route /getBalance is a GET Request. It will retrieve the current running wallet balance
+
+Request Body: NONE
+
+Response Body:
+```json
+{
+    "balance": "float64"
+}
+```
+
+--- 
+
+25. Route /walletPassphrase is a POST Request. It will unlock a wallet for a specified amount of time. walletName is the name of the wallet and timeUnlock is a string in milliseconds that specifies how long the wallet should stay unlocked for. NOTE : Current wallet needs to be unlocked before proceeding with money transfer
+
+Request Body:
+```json
+{
+    "walletName":"string",
+    "timeUnlock":"string"
+}
+```
+
+Response Body:
+```json
+{
+    "status":"string"
+}
+```
+
+---
+
+26. Route /sendToAddressCommand is a POST Request. This will transfer Orca Coin from current wallet to the specified wallet address. You specify the destination wallet address and the amount of money. This route will return a hash of the transaction.
+
+Request Body: 
+```json
+{
+    "walletAddress":"string",
+    "amount":"string"
+}
+```
+
+Response Body:
+```json
+{
+    "hash":"string"
+}
+```
+
+---
+
+27. Route /generateCommand is a POST Request. It will mine the specified number of blocks and sends rewards to the
+running wallet. Specify the amount of blocks to mine and the block hashes will be returned in an array.
+
+Request Body: 
+```json
+{
+    "blocks":"string",
+}
+```
+
+Response Body:
+```json
+[
+    {
+        "hash":"string"
+    }
+]
+```
+
 
 
 

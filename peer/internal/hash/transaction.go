@@ -136,6 +136,14 @@ func LoadInKeys() (*rsa.PublicKey, *rsa.PrivateKey) {
 		fmt.Println("Error reading file:", err)
 		os.Exit(1)
 	}
+	folderName := "./config"
+	if _, err := os.Stat(folderName); os.IsNotExist(err) {
+		// Folder does not exist, create it
+		err := os.Mkdir(folderName, 0755) // 0755 is the permission mode for the folder
+		if err != nil {
+			fmt.Println("Error creating folder:", err)
+		}
+	}
 	_, err1 := os.Stat("./config/key.pub")
 	_, err2 := os.Stat("./config/key.priv")
 	if err1 == nil && err2 == nil {

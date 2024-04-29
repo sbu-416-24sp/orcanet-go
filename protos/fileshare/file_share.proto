@@ -1,0 +1,61 @@
+syntax = "proto3";
+import "google/protobuf/empty.proto";
+option go_package = "peer-node/fileshare";
+option java_multiple_files = true;
+
+package fileshare;
+
+// Client --> Server
+service FileShare{
+    // Consumer --> Market
+    // register a file on the market
+    rpc RegisterFile (RegisterFileRequest) returns (google.protobuf.Empty) {}
+    // Check for holders of a file. returns a list of users
+    rpc CheckHolders (CheckHoldersRequest) returns (HoldersResponse) {}
+    rpc SendFile(FileDesc) returns (FileDesc);
+}
+message User {
+  bytes id = 1;
+  string name = 2;
+
+  string ip = 3;
+  int32 port = 4;
+
+  // price per mb for a file
+  int64 price = 5;
+}
+
+message CheckHoldersRequest {
+  // Hash of FileInfo
+  string fileKey = 1; 
+}
+
+message RegisterFileRequest {
+  User user = 1;
+  // Hash of FileInfo
+  string fileKey = 2;
+}
+
+message HoldersResponse {
+  FileInfo fileInfo = 1;
+  repeated User holders = 2;
+}
+message FileInfo {
+  string fileHash = 1;
+  repeated string chunkHashes = 2;
+
+  // Size of the file in Bytes
+  int64 fileSize = 3;
+  string fileName = 4;
+}
+
+message FileDesc{
+    string file_name_hash = 1;
+    string file_name = 2;
+    int64 file_size_bytes = 3;
+    string file_origin_address = 4;
+    string origin_user_id = 5;
+    float file_cost = 6;
+    string file_data_hash = 7;
+    bytes file_bytes = 8;
+}

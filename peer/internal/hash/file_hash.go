@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"log"
@@ -60,23 +61,22 @@ func NewDataStore(path string) *DataStore {
 	}
 }
 
-func HashFile(address string) ([]byte, error) {
+func HashFile(address string) (string, error) {
 	f, err := os.Open("./files/" + address)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	defer f.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		log.Fatal(err)
-		return nil, err
+		return "", err
 	}
-
-	fmt.Printf("%x", h.Sum(nil))
-	fmt.Println("")
-	return h.Sum(nil), nil
-
+	str := hex.EncodeToString(h.Sum(nil))
+	fmt.Printf("%s", str);
+	fmt.Println("");
+	return str, nil
 }
 
 func (nmp *NameMap) GetFileHash(name string) string {

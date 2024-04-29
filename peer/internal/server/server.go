@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"crypto/rsa"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,10 +11,10 @@ import (
 	"net/http"
 	api "orca-peer/internal/api"
 	"orca-peer/internal/hash"
+	"orca-peer/internal/fileshare"
 	"os"
 	"path/filepath"
 	"time"
-	"crypto/rsa"
 )
 
 const keyServerAddr = "serverAddr"
@@ -121,7 +122,12 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
-	api.InitServer()
+
+	fileShareServer := FileShareServerNode{
+		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
+	}
+
+	//Why are there routes in 2 different spots?
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
@@ -129,11 +135,13 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 		server.storeFile(w, r, confirming, confirmation)
 	})
 	http.HandleFunc("/sendTransaction", handleTransaction)
+	http.HandleFunc("/get-peers", getAllPeers)
+	http.HandleFunc("/get-peer", getPeer)
+	http.HandleFunc("/remove-peer", removePeer)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-
-	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
-
+	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
+	api.InitServer(&fileShareServer.StoredFileInfoMap)
 	http.ListenAndServe(":"+httpPort, nil)
 }
 
@@ -143,7 +151,7 @@ func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confi
 
 	// Ask for confirmation
 	*confirming = true
-	fmt.Printf("\nYou have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
+	fmt.Printf("You have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
 
 	// Check if confirmation is received
 	for *confirmation != "yes" {
