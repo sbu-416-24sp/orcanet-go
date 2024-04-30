@@ -27,5 +27,4 @@ func main() {
 	}
 	fmt.Println("Started block chain api server")
 	orcaCLI.StartCLI(&boostrapNodeAddress, publicKey, privateKey, cmd, orcaAPI.InitServer)
-	return
 }
