@@ -25,6 +25,20 @@ type JobManager struct {
 	Changed bool
 }
 
+type FileChunkRequest struct {
+	FileHash        string `json:"fileHash"`
+	ChunkIndex           int `json:"chunkIndex"`
+	JobId 				string `json:"jobId"`
+}
+
+type FileChunk struct {
+	FileHash        string `json:"fileHash"`
+	ChunkIndex           int `json:"chunkIndex"`
+	MaxChunk           int `json:"maxChunk"`
+	JobId              string `json:"jobId"`
+	Data               []byte `json:"data"`
+}
+
 var Manager JobManager
 
 func InitPeriodicJobSave() {

@@ -16,7 +16,9 @@ import (
 	orcaHash "orca-peer/internal/hash"
 	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
-
+	"github.com/libp2p/go-libp2p"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
@@ -60,10 +62,42 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		fmt.Println("Error parsing in port: must be a integer.", err)
 		return
 	}
+
+	//Get libp2p wrapped privKey
+	libp2pPrivKey, _, err := libp2pcrypto.KeyPairFromStdKey(privKey)
+	if err != nil {
+		panic("Could not generate libp2p wrapped key from standard private key.")
+	}
+
+	//Construct multiaddr from string and create host to listen on it
+	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", dhtPort))
+	opts := []libp2p.Option{
+		libp2p.ListenAddrStrings(sourceMultiAddr.String()),
+		libp2p.Identity(libp2pPrivKey), //derive id from private key
+		libp2p.EnableRelay(),
+	}
+
+	host, err := libp2p.New(opts...)
+	if err != nil {
+		panic(err)
+	}
+
+	hostMultiAddr := ""
+	fmt.Printf("\nlibp2p DHT Host ID: %s\n", host.ID())
+	fmt.Println("DHT Market Multiaddr (if in server mode):")
+	for _, addr := range host.Addrs() {
+		if !strings.Contains(fmt.Sprintf("%s", addr), "127.0.0.1") {
+			hostMultiAddr = fmt.Sprintf("%s/p2p/%s", addr, host.ID())
+			fmt.Println(hostMultiAddr)
+		}
+		fmt.Printf("%s/p2p/%s\n", addr, host.ID())
+	}
+
 	Client = orcaClient.NewClient("files/names/")
 	Client.PrivateKey = privKey
 	Client.PublicKey = pubKey
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey, passKey, Client, startAPIRoutes)
+	Client.Host = host
+	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, libp2pPrivKey, passKey, Client, startAPIRoutes, host)
 	<-serverReady
 	orcaBlockchain.InitBlockchainStats(pubKey)
 	fmt.Println("Welcome to Orcanet!")
@@ -130,6 +164,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				}
 				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
 				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey, "")
+				
 				if err != nil {
 					fmt.Printf("Error getting file %s", err)
 				}

@@ -7,12 +7,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"context"
+	"log"
 	"net/http"
 	orcaBlockchain "orca-peer/internal/blockchain"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/peerstore"
 	"orca-peer/internal/hash"
 	orcaHash "orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
+	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/multiformats/go-multiaddr"
 	"os"
+	"encoding/binary"
+	"bufio"
 	"path/filepath"
 	"strconv"
 	"time"
@@ -22,6 +31,7 @@ type Client struct {
 	name_map   hash.NameMap
 	PublicKey  *rsa.PublicKey
 	PrivateKey *rsa.PrivateKey
+	Host host.Host
 }
 
 func NewClient(path string) *Client {
@@ -117,56 +127,134 @@ func SendTransaction(price float64, ip string, port string, publicKey *rsa.Publi
 	}
 }
 func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walletAddress string, price string, passKey string, jobId string) error {
-	/*
-		file_hash := client.name_map.GetFileHash(filename)
-		if file_hash == "" {
-			fmt.Println("Error: do not have hash for the file")
-			return
-		}
-	*/
-
-	// Create the directory if it doesn't exist
-	err := os.MkdirAll("./files/requested/", 0755)
+	//Dial peer and start stream to request file
+	peerMA, err := multiaddr.NewMultiaddr(ip)
 	if err != nil {
-		panic(err)
-	}
-
-	// Create file
-	destFile, err := os.Create("./files/requested/" + file_hash)
-	if err != nil {
+		log.Println(err)
+		orcaJobs.UpdateJobStatus(jobId, "terminated")
 		return err
 	}
-	defer destFile.Close()
 
-	chunkIndex := 0
+	peer, err := peer.AddrInfoFromP2pAddr(peerMA)
+	if err != nil {
+		log.Println(err)
+		orcaJobs.UpdateJobStatus(jobId, "terminated")
+		return err
+	}
+
+	client.Host.Peerstore().AddAddrs(peer.ID, peer.Addrs, peerstore.AddressTTL)
+
+	err = client.Host.Connect(context.Background(), *peer)
+	if err != nil {
+		log.Println(err)
+		orcaJobs.UpdateJobStatus(jobId, "terminated")
+		return err
+	}
+
+	s, err := client.Host.NewStream(context.Background(), peer.ID, protocol.ID("orcanet-fileshare/1.0/" + file_hash))
+	if err != nil {
+		log.Println(err)
+		orcaJobs.UpdateJobStatus(jobId, "terminated")
+		return err
+	}
+	defer s.Close()
+
+	//continously send request and process response from peer
+	chunkIndex := -1
 	for {
-		maxChunk, data, err := client.getChunkData(ip, port, file_hash, chunkIndex)
+		fileChunkReq := orcaJobs.FileChunkRequest{
+			FileHash: file_hash,
+			ChunkIndex: chunkIndex + 1,
+			JobId: jobId,
+		}
+	
+		nextChunkReqBytes, err := json.Marshal(fileChunkReq)
 		if err != nil {
+			fmt.Println("Error:", err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
 			return err
 		}
-		err = client.sendTransactionFee(price, walletAddress, passKey)
+	
+		lengthBytes := make([]byte, 4)
+		binary.LittleEndian.PutUint32(lengthBytes, uint32(len(nextChunkReqBytes)))
+		_, err = s.Write(lengthBytes)
 		if err != nil {
-			return err
+			fmt.Println(err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
+			return nil
 		}
-		if jobId != "" {
-			priceInt, err := strconv.ParseInt(price, 10, 64)
+		
+		_, err = s.Write(nextChunkReqBytes)
+		if err != nil {
+			fmt.Println(err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
+			return nil
+		}
+
+		buf := bufio.NewReader(s)
+		lengthBytes = make([]byte, 0)
+		for i := 0; i < 4; i++ {
+			b, err := buf.ReadByte()
 			if err != nil {
 				fmt.Println(err)
-			} else {
-				if client.PublicKey != nil && client.PrivateKey != nil {
-					SendTransaction(float64(priceInt), ip, string(port), client.PublicKey, client.PrivateKey)
-				}
-				orcaJobs.UpdateJobCost(jobId, int(priceInt))
-			}
+				orcaJobs.UpdateJobStatus(jobId, "terminated")
+				return err
+			}	
+			lengthBytes = append(lengthBytes, b)
 		}
-		if _, err := destFile.Write(data); err != nil {
+
+		length := binary.LittleEndian.Uint32(lengthBytes)
+		payload := make([]byte, length)
+		_, err = io.ReadFull(buf, payload)
+		if err != nil {
+			fmt.Println(err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
+			return err
+		}
+		
+		fileChunk := orcaJobs.FileChunk{}
+		err = json.Unmarshal(payload, &fileChunk)
+		if err != nil {
+			fmt.Println("Error unmarshaling JSON:", err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
+			return err
+		}
+		hash := fileChunk.FileHash
+
+		err = client.sendTransactionFee(price, walletAddress, passKey)
+		if err != nil {
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
+			return err
+		}
+		priceInt, err := strconv.ParseInt(price, 10, 64)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			if client.PublicKey != nil && client.PrivateKey != nil {
+				SendTransaction(float64(priceInt), ip, string(port), client.PublicKey, client.PrivateKey)
+			}
+			orcaJobs.UpdateJobCost(jobId, int(priceInt))
+		}
+
+		file, err := os.OpenFile("./files/requested/" + hash, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		defer file.Close()
+	
+		_, err = file.Write(fileChunk.Data)
+		if err != nil {
+			log.Fatal(err)
+			orcaJobs.UpdateJobStatus(jobId, "terminated")
 			return err
 		}
 
-		chunkIndex++
-		if chunkIndex == maxChunk {
+		fmt.Printf("Chunk %d for %s received and written\n", hash, fileChunk.ChunkIndex)
+
+		if fileChunk.ChunkIndex == fileChunk.MaxChunk - 1 {
+			fmt.Println("All chunks received and written")
 			break
 		}
+
+		chunkIndex += 1
+
 		if jobId != "" {
 			status := orcaJobs.GetJobStatus(jobId)
 			if status == "terminated" {
@@ -181,9 +269,8 @@ func (client *Client) GetFileOnce(ip string, port int32, file_hash string, walle
 			}
 		}
 	}
-	orcaJobs.UpdateJobStatus(jobId, "finished")
 
-	fmt.Printf("\nFile %s downloaded successfully!\n> ", file_hash)
+	orcaJobs.UpdateJobStatus(jobId, "finished")
 	return nil
 }
 

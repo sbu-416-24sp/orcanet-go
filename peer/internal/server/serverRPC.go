@@ -11,7 +11,6 @@ package server
 import (
 	"bufio"
 	"context"
-	"crypto/rsa"
 	"errors"
 	"fmt"
 	"io"
@@ -24,9 +23,7 @@ import (
 	"strings"
 	"sync"
 	"time"
-
 	"github.com/go-ping/ping"
-	"github.com/libp2p/go-libp2p"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
@@ -34,7 +31,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
 	dutil "github.com/libp2p/go-libp2p/p2p/discovery/util"
-	"github.com/multiformats/go-multiaddr"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/oschwald/geoip2-golang"
 	"google.golang.org/grpc"
@@ -57,36 +53,11 @@ var (
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(stdPrivKey *rsa.PrivateKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode) {
+func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode, host host.Host) {
 	ctx := context.Background()
 
-	//Get libp2p wrapped privKey
-	privKey, _, err := libp2pcrypto.KeyPairFromStdKey(stdPrivKey)
-	if err != nil {
-		panic("Could not generate libp2p wrapped key from standard private key.")
-	}
-
-	pubKey := privKey.GetPublic()
-
-	//Construct multiaddr from string and create host to listen on it
-	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", dhtPort))
-	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(sourceMultiAddr.String()),
-		libp2p.Identity(privKey), //derive id from private key
-	}
-
-	host, err := libp2p.New(opts...)
-	if err != nil {
-		panic(err)
-	}
-
-	fmt.Printf("\nlibp2p DHT Host ID: %s\n", host.ID())
-	fmt.Println("DHT Market Multiaddr (if in server mode):")
-	for _, addr := range host.Addrs() {
-		fmt.Printf("%s/p2p/%s\n", addr, host.ID())
-	}
-
 	bootstrapPeers := ReadBootstrapPeers()
+	pubKey := privKey.GetPublic()
 
 	// Start a DHT, for now we will start in client mode until we can implement a way to
 	// detect if we are behind a NAT or not to run in server mode.
@@ -537,8 +508,8 @@ func (s *FileShareServerNode) CheckHolders(ctx context.Context, in *fileshare.Ch
 }
 
 // Find file bootstrap.peers and parse it to get multiaddrs of bootstrap peers
-func ReadBootstrapPeers() []multiaddr.Multiaddr {
-	peers := []multiaddr.Multiaddr{}
+func ReadBootstrapPeers() []ma.Multiaddr {
+	peers := []ma.Multiaddr{}
 
 	// For now bootstrap.peers can be in cli folder but it can be moved
 	file, err := os.Open("internal/cli/bootstrap.peers")
@@ -552,7 +523,7 @@ func ReadBootstrapPeers() []multiaddr.Multiaddr {
 	for scanner.Scan() {
 		line := scanner.Text()
 
-		multiadd, err := multiaddr.NewMultiaddr(line)
+		multiadd, err := ma.NewMultiaddr(line)
 		if err != nil {
 			panic(err)
 		}

@@ -15,10 +15,11 @@ import (
 	"orca-peer/internal/fileshare"
 	"orca-peer/internal/hash"
 	orcaJobs "orca-peer/internal/jobs"
+	"github.com/libp2p/go-libp2p/core/host"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"os"
 	"path/filepath"
 	"time"
-
 	"github.com/google/uuid"
 )
 
@@ -98,7 +99,7 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey, passKey string, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, libp2pPrivKey libp2pcrypto.PrivKey, passKey string, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo), host host.Host) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
@@ -126,7 +127,7 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 	http.HandleFunc("/add-job", AddJobHandler)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer)
+	go CreateMarketServer(libp2pPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer, host)
 	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
 
 	http.ListenAndServe(":"+httpPort, nil)
