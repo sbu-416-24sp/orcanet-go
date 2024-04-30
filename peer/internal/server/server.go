@@ -1,60 +1,46 @@
 package server
 
 import (
-	"context"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"log"
+	"math/big"
 	"net/http"
-	api "orca-peer/internal/api"
+	orcaClient "orca-peer/internal/client"
+	"orca-peer/internal/fileshare"
 	"orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
+	"github.com/libp2p/go-libp2p/core/host"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
 	"os"
 	"path/filepath"
 	"time"
+	"github.com/google/uuid"
 )
 
 const keyServerAddr = "serverAddr"
 
 var (
 	eventChannel chan bool
+	Client       *orcaClient.Client
+	PassKey      string
 )
 
 type HTTPServer struct {
 	storage *hash.DataStore
 }
 
-func Init() {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", getRoot)
-	mux.HandleFunc("/requestFile", getFile)
-	mux.HandleFunc("/sendTransaction", handleTransaction)
-
-	ctx := context.Background()
-	server := &http.Server{
-		Addr:    ":3333",
-		Handler: mux,
-		BaseContext: func(l net.Listener) context.Context {
-			ctx = context.WithValue(ctx, keyServerAddr, l.Addr().String())
-			return ctx
-		},
-	}
-	go func() {
-		err := server.ListenAndServe()
-		if errors.Is(err, http.ErrServerClosed) {
-			fmt.Printf("Server closed\n")
-		} else if err != nil {
-			fmt.Printf("Error listening for server: %s\n", err)
-		}
-	}()
-}
-
 type TransactionFile struct {
-	Bytes               []byte `json:"bytes"`
-	UnlockedTransaction []byte `json:"transaction"`
-	PublicKey           string `json:"public_key"`
+	Bytes               []byte  `json:"bytes"`
+	UnlockedTransaction []byte  `json:"transaction"`
+	PublicKey           string  `json:"public_key"`
+	Date                string  `json:"date"`
+	Cost                float64 `json:"cost"`
 }
 type Transaction struct {
 	Price     float64 `json:"price"`
@@ -64,7 +50,6 @@ type Transaction struct {
 
 func handleTransaction(w http.ResponseWriter, r *http.Request) {
 	// Read the request body
-	fmt.Println("Handling a transaction...")
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Error reading request body", http.StatusBadRequest)
@@ -74,7 +59,6 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 
 	// Print the received byte string
 	var data TransactionFile
-	fmt.Println("Received byte string:")
 	err = json.Unmarshal(body, &data)
 	if err != nil {
 		fmt.Println("Error unmarshalling JSON:", err)
@@ -86,13 +70,12 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	timestamp := time.Now()
-	timestampStr := timestamp.Format(time.RFC3339)
+	timestampStr := timestamp.Format(time.RFC3339Nano)
 	err = os.WriteFile("./files/transactions/"+timestampStr, body, 0644)
 	if err != nil {
 		fmt.Println("Error writing transaction to file:", err)
 		return
 	}
-	fmt.Println("Data in struct:", data)
 	error := hash.VerifySignature(data.UnlockedTransaction, data.Bytes, publicKey)
 	if error != nil {
 		fmt.Println("Properly Hashed Transaction")
@@ -116,12 +99,19 @@ func handleTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 // Start HTTP/RPC server
-func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, stdPrivKey *rsa.PrivateKey) {
+func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady chan bool, confirming *bool, confirmation *string, libp2pPrivKey libp2pcrypto.PrivKey, passKey string, client *orcaClient.Client, startAPIRoutes func(*map[string]fileshare.FileInfo), host host.Host, hostMultiAddr string) {
 	eventChannel = make(chan bool)
 	server := HTTPServer{
 		storage: hash.NewDataStore("files/stored/"),
 	}
-	api.InitServer()
+	go orcaJobs.InitPeriodicJobSave()
+	Client = client
+	PassKey = passKey
+	fileShareServer := FileShareServerNode{
+		StoredFileInfoMap: make(map[string]fileshare.FileInfo),
+	}
+
+	//Why are there routes in 2 different spots?
 	http.HandleFunc("/requestFile/", func(w http.ResponseWriter, r *http.Request) {
 		server.sendFile(w, r, confirming, confirmation)
 	})
@@ -129,11 +119,71 @@ func StartServer(httpPort string, dhtPort string, rpcPort string, serverReady ch
 		server.storeFile(w, r, confirming, confirmation)
 	})
 	http.HandleFunc("/sendTransaction", handleTransaction)
+	http.HandleFunc("/get-peers", getAllPeers)
+	http.HandleFunc("/get-peer", getPeer)
+	http.HandleFunc("/find-peer", FindPeersForHash)
+	http.HandleFunc("/remove-peer", removePeer)
+
+	http.HandleFunc("/add-job", AddJobHandler)
 
 	fmt.Printf("HTTP Listening on port %s...\n", httpPort)
-	go CreateMarketServer(stdPrivKey, dhtPort, rpcPort, serverReady)
+	go CreateMarketServer(libp2pPrivKey, dhtPort, rpcPort, serverReady, &fileShareServer, host, hostMultiAddr)
+	startAPIRoutes(&fileShareServer.StoredFileInfoMap)
 
 	http.ListenAndServe(":"+httpPort, nil)
+}
+
+type Peer struct {
+	PeerId string  `json:"peerID"`
+	Ip     string  `json:"ip"`
+	Region string  `json:"region"`
+	Price  float32 `json:"price"`
+}
+
+func FindPeersForHash(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		queryParams := r.URL.Query()
+		hash := queryParams.Get("fileHash")
+		peers, err := findPeersForHash(hash)
+		if err != nil {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeStatusUpdate(w, "Errors retrieving information about peers holding this hash.")
+			return
+		}
+		jsonData, err := json.Marshal(peers)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		return
+	}
+}
+
+func findPeersForHash(fileHash string) ([]Peer, error) {
+	holders, err := SetupCheckHolders(fileHash)
+	if err != nil {
+		return []Peer{}, err
+	}
+	peers := make([]Peer, 0)
+	for _, holder := range holders.Holders {
+		location, err := getLocationFromIP(string(holder.GetId()))
+		if err != nil {
+			return []Peer{}, errors.New("unable to get location about peer")
+		}
+		peers = append(peers, Peer{
+			PeerId: string(holder.GetId()),
+			Ip:     holder.Ip,
+			Region: location,
+		})
+	}
+	return peers, nil
 }
 
 func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confirming *bool, confirmation *string) {
@@ -141,22 +191,22 @@ func (server *HTTPServer) sendFile(w http.ResponseWriter, r *http.Request, confi
 	filename := r.URL.Path[len("/requestFile/"):]
 
 	// Ask for confirmation
-	*confirming = true
-	fmt.Printf("You have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
+	// *confirming = true
+	// fmt.Printf("You have just received a request to send file '%s'. Do you want to send the file? (yes/no): ", filename)
 
-	// Check if confirmation is received
-	for *confirmation != "yes" {
-		if *confirmation != "" {
-			http.Error(w, fmt.Sprintf("Client declined to send file '%s'.", filename), http.StatusUnauthorized)
-			*confirmation = ""
-			*confirming = false
-			return
-		}
-	}
-	*confirmation = ""
-	*confirming = false
+	// // Check if confirmation is received
+	// for *confirmation != "yes" {
+	// 	if *confirmation != "" {
+	// 		http.Error(w, fmt.Sprintf("Client declined to send file '%s'.", filename), http.StatusUnauthorized)
+	// 		*confirmation = ""
+	// 		*confirming = false
+	// 		return
+	// 	}
+	// }
+	// *confirmation = ""
+	// *confirming = false
 
-	file, err := os.Open("./files/" + filename)
+	file, err := os.Open("./files/stored/" + filename)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
@@ -268,11 +318,6 @@ func (server *HTTPServer) storeFile(w http.ResponseWriter, r *http.Request, conf
 	fmt.Printf("\nStored file %s hash %s!\n> ", fileData.FileName, file_hash)
 }
 
-func getRoot(w http.ResponseWriter, r *http.Request) {
-	fmt.Printf("got /root request\n")
-	io.WriteString(w, "Hello, HTTP!\n")
-}
-
 func getFile(w http.ResponseWriter, r *http.Request) {
 	// Get the context from the request
 	ctx := r.Context()
@@ -310,5 +355,124 @@ func getFile(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Write a response indicating that no filename was found
 		io.WriteString(w, "No filename found\n")
+	}
+}
+func ConvertKeyToString(n *big.Int, e int) string {
+	N := n // Replace with your actual modulus
+	E := e // Replace with your actual public exponent
+
+	// Create an RSA public key using the modulus and exponent
+	publicKey := rsa.PublicKey{
+		N: N,
+		E: E,
+	}
+
+	// Marshal the public key into DER format
+	publicKeyBytes, err := x509.MarshalPKIXPublicKey(&publicKey)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create a PEM block for the public key
+	publicKeyPEM := pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: publicKeyBytes,
+	}
+
+	// Write the PEM-encoded public key to a file (or any io.Writer)
+	publicKeyString := string(pem.EncodeToMemory(&publicKeyPEM))
+	return publicKeyString
+}
+func jobRoutine(jobId string, hash string, peerId string) {
+	holders, err := SetupCheckHolders(hash)
+	if err != nil {
+		fmt.Printf("Error finding holders for file: %x", err)
+		return
+	}
+	var bestHolder *fileshare.User
+	var selectedHolder *fileshare.User
+	bestHolder = nil
+	selectedHolder = nil
+	for _, holder := range holders.Holders {
+		if bestHolder == nil {
+			bestHolder = holder
+		} else if holder.GetPrice() < bestHolder.GetPrice() {
+			bestHolder = holder
+		}
+		if string(holder.Id) == peerId {
+			selectedHolder = holder
+		}
+	}
+	if bestHolder == nil && selectedHolder == nil {
+		fmt.Println("Unable to find holder for this hash.")
+		return
+	}
+	if selectedHolder != nil {
+		bestHolder = selectedHolder
+	}
+	fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
+
+	pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+	if err != nil {
+		log.Fatal("failed to parse DER encoded public key: ", err)
+	}
+	rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+	if !ok {
+		log.Fatal("not an RSA public key")
+	}
+	key := ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+	err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), hash, key, fmt.Sprintf("%d", bestHolder.GetPrice()), PassKey, jobId)
+	if err != nil {
+		fmt.Printf("Error getting file %s", err)
+	}
+}
+
+type AddJobReqPayload struct {
+	FileHash string `json:"fileHash"`
+	PeerId   string `json:"peer"`
+}
+
+type AddJobResPayload struct {
+	JobId string `json:"jobID"`
+}
+
+func AddJobHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPut {
+		var payload AddJobReqPayload
+		decoder := json.NewDecoder(r.Body)
+		if err := decoder.Decode(&payload); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			writeStatusUpdate(w, "Cannot marshal payload in Go object. Does the payload have the correct body structure?")
+			return
+		}
+		id := uuid.New()
+		timeString := time.Now().Format(time.RFC3339)
+		newJob := orcaJobs.Job{
+			FileHash:        payload.FileHash,
+			JobId:           id.String(),
+			TimeQueued:      timeString,
+			Status:          "active",
+			AccumulatedCost: 0,
+			ProjectedCost:   -1,
+			ETA:             -1,
+			PeerId:          payload.PeerId,
+		}
+		orcaJobs.AddJob(newJob)
+		go jobRoutine(newJob.JobId, payload.FileHash, payload.PeerId)
+		w.WriteHeader(http.StatusOK)
+		response := AddJobResPayload{JobId: newJob.JobId}
+		jsonData, err := json.Marshal(response)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			writeStatusUpdate(w, "Failed to convert JSON Data into a string")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(jsonData)
+	} else {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		writeStatusUpdate(w, "Only PUT requests will be handled.")
+		return
 	}
 }

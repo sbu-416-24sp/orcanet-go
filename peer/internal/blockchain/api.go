@@ -1,103 +1,178 @@
 package blockchain
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 )
 
-// btcctlConfPath is the path to the btcctl configuration file
-// const btcctlConfPath = filepath.Join(currentUser.HomeDir, "$GOPATH", "orcacointest", "cmd", "btcctl", "sample-btcctl.conf")
-
-// Commands
 const (
-	getBalanceCommand       = "getbalance"
-	sendToAddressCommand    = "sendtoaddress"
-	generateCommand         = "generate"
-	walletPassphraseCommand = "walletpassphrase"
+	orcaNetPath    string = "./OrcaNet/OrcaNet"
+	btcctlPath     string = "./OrcaNet/cmd/btcctl/btcctl"
+	orcaWalletPath string = "./OrcaWallet/btcwallet"
 )
 
-var filepath string
+var cmdProcess *exec.Cmd
 
-func StartBitcoinNode() {
-	fmt.Println("EEES")
-	filepath, err := getConfFilePath()
-	if err != nil {
-		fmt.Println("Error when computing conf path", err)
-		return
+func printOutput(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
 	}
-	filepath = filepath + ""
-	c, b := exec.Command("../coin/btcd", "--freshnet"), new(strings.Builder)
-	c.Stdout = b
-	c.Run()
-	print(b.String())
-	out, err := exec.Command("../coin/btcd", "--freshnet").Output()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
+	if err := scanner.Err(); err != nil {
+		fmt.Printf("Error reading stream: %v\n", err)
 	}
-	lines := strings.Split(string(out), "\n")
-	for _, line := range lines {
-		fmt.Println(line)
-	}
-	// args := []string{getBalanceCommand}
-	// apiCall(args)
 }
 
-func ApiCall(confPath string, args []string) {
-	argsLen := len(args)
-	if argsLen == 0 {
-		fmt.Println("No commands were provided")
-		return
+// startOrcaWallet: starts the OrcaWallet
+func StartOrcaWallet() (*exec.Cmd, error) {
+	// check for the existence of the executable
+	_, err := os.Stat(orcaWalletPath)
+	if os.IsNotExist(err) {
+		fmt.Println("Cannot find Orcawallet executable")
+		return nil, err
 	}
 
-	for argIdx := 0; argIdx < argsLen; argIdx++ {
-		arg := args[argIdx]
-		switch arg {
-		case getBalanceCommand:
-			err := executeCommand(confPath, getBalanceCommand)
-			if err != nil {
-				fmt.Println("Error when running 'getbalance':", err)
-				return
-			}
-		case sendToAddressCommand, generateCommand, walletPassphraseCommand:
-			if len(args[argIdx:]) < 2 {
-				fmt.Printf("Not enough arguments for the command '%s'\n", arg)
-				return
-			}
+	cmd := exec.Command(orcaWalletPath)
+	if err := cmd.Start(); err != nil {
+		fmt.Println(err)
+		fmt.Println("failed to start wallet executable")
+		return nil, err
+	}
+	fmt.Println("Wallet started successfully")
+	return cmd, err
+}
 
-			err := executeCommand(confPath, arg, args[argIdx+1:]...)
-			if err != nil {
-				fmt.Printf("Error running '%s': %v\n", arg, err)
-				return
-			}
-			argIdx++
+// getBtcdConfFilePath returns the file path for btcd.conf based on the user's OS
+func getBtcdConfFilePath() string {
+	const defaultConfigFilename = "btcd.conf"
+	homeDir := getUserHomeDir()
+	if homeDir == "" {
+		return "" // Return empty string if the home directory can't be determined
+	}
+
+	// Determine the application data directory based on the operating system
+	var appDataDir string
+	switch runtime.GOOS {
+	case "windows":
+		appDataDir = filepath.Join(homeDir, "AppData", "Roaming", "Btcd")
+	case "darwin": // macOS
+		appDataDir = filepath.Join(homeDir, "Library", "Application Support", "Btcd")
+	case "linux":
+		appDataDir = filepath.Join(homeDir, ".btcd")
+	default:
+		appDataDir = filepath.Join(homeDir, ".btcd") // Default to a Unix-style hidden directory
+	}
+
+	return filepath.Join(appDataDir, defaultConfigFilename)
+}
+
+// getUserHomeDir returns the home directory of the current user
+func getUserHomeDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Println("Error getting user home directory:", err)
+		return ""
+	}
+	return homeDir
+}
+
+// returns an array [rpcuser, rpcpass]
+func readRPCInfo(path string) ([]string, error) {
+	body, err := os.ReadFile(path)
+
+	if err != nil {
+		return nil, fmt.Errorf("error reading the btcd.conf file")
+	}
+
+	content := string(body)
+	var rpcInfo []string
+	// find the line with "rpcuser" and "rpcpass"
+	lines := strings.Split(content, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "rpcuser") || strings.HasPrefix(line, "rpcpass") {
+			parts := strings.Split(line, "=")
+			// if len(parts) == 2 {
+			// 	fmt.Println(parts)
+			// 	rpcInfo = append(rpcInfo, strings.TrimSpace(parts[1]))
+			// }
+			rpcInfo = append(rpcInfo, strings.TrimSpace(parts[1]))
 		}
 	}
+
+	if len(rpcInfo) < 2 {
+		return nil, fmt.Errorf("error finding rpcuser and rpc pass")
+	}
+	return rpcInfo, nil
 }
 
-// executeCommand executes the given command with the provided arguments
-func executeCommand(confPath string, command string, args ...string) error {
-	cmd := exec.Command("../coin/btcctl", append([]string{"--configfile=" + confPath, command}, args...)...)
-	cmd.Args = append(cmd.Args, "--notls")
-	output, err := cmd.Output()
+// callBtcctlCmd: calls a Btcctl command Exactly as specified in string param, and returns the stdout of btcctl as a string
+// its a singular string, but you can pass as many arguments, we will split the arguments in this fn
+func CallBtcctlCmd(cmdStr string) (string, error) {
+	// get the rpc values
+	rpcInfo, err := readRPCInfo(getBtcdConfFilePath())
 	if err != nil {
-		return fmt.Errorf("error running '%s': %w", command, err)
+		return "", fmt.Errorf("failed to get rpc info")
 	}
-	fmt.Println(string(output))
+	fmt.Println(rpcInfo)
+	params := strings.Split(cmdStr, " ")
+	params = append(params, "--rpcuser="+strings.TrimSpace(rpcInfo[0])+"=", "--rpcpass="+strings.TrimSpace(rpcInfo[1])+"=")
+
+	fmt.Println(params)
+	cmd := exec.Command(btcctlPath, params...)
+	// get the stdout of cmd, CAN HANG but shouldn't be a problem in a btcctl command
+	stdout, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to execute btcctl commands '%s': %s, error: %v", cmdStr, stdout, err)
+	}
+	fmt.Println(err)
+	return string(stdout), nil
+}
+
+func unlockWallet(walletPass string) error {
+	command := fmt.Sprintf("--wallet walletpassphrase %s 100", walletPass)
+	stdout, err := CallBtcctlCmd(command)
+	if err != nil {
+		return fmt.Errorf("failed to unlock wallet: %s, error: %v", stdout, err)
+	}
 	return nil
 }
 
-// Retrieves the user's filepath for sample-btcctl.conf
-func getConfFilePath() (string, error) {
-	currentDir, err := os.Getwd()
+func sendCoins(numCoins string, address string) error {
+	command := fmt.Sprintf("--wallet sendtoaddress %s %s", address, numCoins)
+	stdout, err := CallBtcctlCmd(command)
 	if err != nil {
-		fmt.Println("Error:", err)
+		return fmt.Errorf("failed to send coins: %s, error: %v", stdout, err)
+	}
+	return nil
+}
+
+// sendToAddress: endpoint to send n coins to an address
+// if you want to send coins to a specific wallet, ask the recepient to getNewAddress and pass that address to the query string
+// Usage: make a JSON request with 2 fields "coins" and "address"
+func SendToAddress(coins string, address string, senderWalletPass string) error {
+	if coins == "" || address == "" || senderWalletPass == "" {
+		return errors.New("missing parameter")
 	}
 
-	// Construct the file path with the username and $GOPATH
-	filePath := fmt.Sprintf("%s/../coin/cmd/btcctl/sample-btcctl.conf", currentDir)
+	if _, err := strconv.ParseFloat(coins, 64); err != nil {
+		return errors.New("invalid coin amount")
+	}
 
-	return filePath, nil
+	if err := unlockWallet(senderWalletPass); err != nil {
+		return errors.New("unable to unlock wallet")
+	}
+
+	if err := sendCoins(coins, address); err != nil {
+		return errors.New("unable to send coins")
+	}
+
+	return nil
 }

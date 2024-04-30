@@ -3,35 +3,48 @@ package cli
 import (
 	"bufio"
 	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"net"
+	"net/http"
+	orcaBlockchain "orca-peer/internal/blockchain"
 	orcaClient "orca-peer/internal/client"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
 	"orca-peer/internal/server"
 	orcaServer "orca-peer/internal/server"
+	"github.com/libp2p/go-libp2p"
+	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/multiformats/go-multiaddr"
 	orcaStatus "orca-peer/internal/status"
 	orcaStore "orca-peer/internal/store"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 )
 
 var (
-	ip string
+	Ip     string
+	Port   int64
+	Client *orcaClient.Client
 )
 
-func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey) {
+func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.PrivateKey, orcaNetAPIProc *exec.Cmd, startAPIRoutes func(*map[string]fileshare.FileInfo)) {
 	fmt.Println("Loading...")
 	rpcPort := getPort("Market RPC Server")
 	dhtPort := getPort("Market DHT Host")
 	httpPort := getPort("HTTP Server")
-	for httpPort == "" || rpcPort == "" || dhtPort == "" {
+	passKey := getPassKey()
+	for httpPort == "" || rpcPort == "" || dhtPort == "" || passKey == "" {
 		fmt.Println("All three ports must be given, please try again.")
 		rpcPort = getPort("Market RPC Server")
 		dhtPort = getPort("Market DHT Host")
 		httpPort = getPort("HTTP Server")
+		passKey = getPassKey()
 	}
 	serverReady := make(chan bool)
 	confirming := false
@@ -43,14 +56,54 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 		fmt.Println("Unable to establish user IP, please try again")
 		return
 	}
-	ip = locationJson["ip"].(string)
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, privKey)
+	Ip = locationJson["ip"].(string)
+	Port, err = strconv.ParseInt(httpPort, 10, 64)
+	if err != nil {
+		fmt.Println("Error parsing in port: must be a integer.", err)
+		return
+	}
+
+	//Get libp2p wrapped privKey
+	libp2pPrivKey, _, err := libp2pcrypto.KeyPairFromStdKey(privKey)
+	if err != nil {
+		panic("Could not generate libp2p wrapped key from standard private key.")
+	}
+
+	//Construct multiaddr from string and create host to listen on it
+	sourceMultiAddr, _ := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/0.0.0.0/tcp/%s", dhtPort))
+	opts := []libp2p.Option{
+		libp2p.ListenAddrStrings(sourceMultiAddr.String()),
+		libp2p.Identity(libp2pPrivKey), //derive id from private key
+		libp2p.EnableRelay(),
+	}
+
+	host, err := libp2p.New(opts...)
+	if err != nil {
+		panic(err)
+	}
+
+	hostMultiAddr := ""
+	fmt.Printf("\nlibp2p DHT Host ID: %s\n", host.ID())
+	fmt.Println("DHT Market Multiaddr (if in server mode):")
+	for _, addr := range host.Addrs() {
+		if !strings.Contains(fmt.Sprintf("%s", addr), "127.0.0.1") {
+			hostMultiAddr = fmt.Sprintf("%s/p2p/%s", addr, host.ID())
+			fmt.Println(hostMultiAddr)
+		}
+		fmt.Printf("%s/p2p/%s\n", addr, host.ID())
+	}
+
+	Client = orcaClient.NewClient("files/names/")
+	Client.PrivateKey = privKey
+	Client.PublicKey = pubKey
+	Client.Host = host
+	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, libp2pPrivKey, passKey, Client, startAPIRoutes, host, hostMultiAddr)
 	<-serverReady
+	orcaBlockchain.InitBlockchainStats(pubKey)
 	fmt.Println("Welcome to Orcanet!")
 	fmt.Println("Dive In and Explore! Type 'help' for available commands.")
 
 	reader := bufio.NewReader(os.Stdin)
-	client := orcaClient.NewClient("files/names/")
 
 	for {
 		fmt.Print("> ")
@@ -92,7 +145,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				for _, holder := range holders.Holders {
 					if bestHolder == nil {
 						bestHolder = holder
-					} else if bestHolder.Price < holder.Price {
+					} else if holder.GetPrice() < bestHolder.GetPrice() {
 						bestHolder = holder
 					}
 				}
@@ -100,39 +153,59 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 					fmt.Println("Unable to find holder for this hash.")
 					continue
 				}
-				client.GetFileOnce(string(bestHolder.Ip), string(bestHolder.Port), args[0])
+				fmt.Printf("%s - %d OrcaCoin\n", bestHolder.GetIp(), bestHolder.GetPrice())
+				pubKeyInterface, err := x509.ParsePKIXPublicKey(bestHolder.Id)
+				if err != nil {
+					log.Fatal("failed to parse DER encoded public key: ", err)
+				}
+				rsaPubKey, ok := pubKeyInterface.(*rsa.PublicKey)
+				if !ok {
+					log.Fatal("not an RSA public key")
+				}
+				key := orcaServer.ConvertKeyToString(rsaPubKey.N, rsaPubKey.E)
+				err = Client.GetFileOnce(bestHolder.GetIp(), bestHolder.GetPort(), args[0], key, fmt.Sprintf("%d", bestHolder.GetPrice()), passKey, "")
+				
+				if err != nil {
+					fmt.Printf("Error getting file %s", err)
+				}
 			} else {
 				fmt.Println("Usage: get [fileHash]")
-				fmt.Println()
 			}
 		case "store":
 			if len(args) == 2 {
+				fileName := args[0]
+				filePath := "./files/" + fileName
+				if _, err := os.Stat(filePath); err == nil {
+
+				} else if os.IsNotExist(err) {
+					fmt.Println("file does not exist inside files folder")
+					continue
+				} else {
+					fmt.Println("error checking file's existence, please try again")
+					continue
+				}
 				costPerMB, err := strconv.ParseInt(args[1], 10, 64)
 				if err != nil {
 					fmt.Println("Error parsing in cost per MB: must be a int64", err)
 					continue
 				}
-				port, err := strconv.ParseInt(httpPort, 10, 64)
+				err = server.SetupRegisterFile(filePath, fileName, costPerMB, Ip, int32(Port))
 				if err != nil {
-					fmt.Println("Error parsing in port: must be a integer.", err)
-					continue
-				}
-				err = server.SetupRegisterFile(args[0], costPerMB, ip, int32(port))
-				if err != nil {
-					fmt.Printf("Unable to register file on DHT: %x", err)
+					fmt.Printf("Unable to register file on DHT: %s", err)
 				} else {
 					fmt.Println("Sucessfully registered file on DHT.")
 				}
 			} else {
-				fmt.Println("Usage: store [fileHash] [amount]")
-				fmt.Println()
+				fmt.Println("Usage: store [fileName] [amount]")
 			}
 		case "import":
 			if len(args) == 1 {
-				go client.ImportFile(args[0])
+				err := Client.ImportFile(args[0])
+				if err != nil {
+					fmt.Println(err)
+				}
 			} else {
 				fmt.Println("Usage: import [filepath]")
-				fmt.Println()
 			}
 		case "location":
 			fmt.Println(orcaStatus.GetLocationData())
@@ -147,7 +220,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 
 		case "list":
 			files := orcaStore.GetAllLocalFiles()
-			fmt.Print("Files found:")
+			fmt.Print("Files found: \n")
 			for _, file := range files {
 				fmt.Println(file.Name)
 			}
@@ -156,7 +229,6 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				orcaHash.HashFile(args[0])
 			} else {
 				fmt.Println("Usage: hash [fileName]")
-				fmt.Println()
 			}
 		case "send":
 			if len(args) == 3 {
@@ -168,30 +240,47 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 				orcaClient.SendTransaction(cost, args[1], args[2], pubKey, privKey)
 			} else {
 				fmt.Println("Usage: send [amount] [ip] [port]")
-				fmt.Println()
 			}
-
 		case "exit":
 			fmt.Println("Exiting...")
+
+			for _, fileInfo := range orcaStore.GetAllLocalFiles() {
+				filePath := "./files/stored/" + fileInfo.Name
+				err := os.Remove(filePath)
+				if err != nil {
+					fmt.Printf("Error cleaning up stored files: %s\n", err)
+				}
+			}
+
+			err = orcaNetAPIProc.Process.Signal(os.Interrupt)
+			if err != nil {
+				fmt.Printf("Error killing OrcaNet: %s\n", err)
+			}
+
 			return
 		case "getdir":
 			if len(args) == 3 {
-				go client.GetDirectory(args[0], args[1], args[2])
+				port, err := strconv.ParseInt(args[1], 10, 32)
+				if err != nil {
+					fmt.Printf("Invalid port: %s\n", err)
+					fmt.Println()
+					continue
+				}
+
+				go Client.GetDirectory(args[0], int32(port), args[2])
 			} else {
 				fmt.Println("Usage: getdir [ip] [port] [path]")
-				fmt.Println()
 			}
 		case "storedir":
 			if len(args) == 3 {
-				go client.StoreDirectory(args[0], args[1], args[2])
+				go Client.StoreDirectory(args[0], args[1], args[2])
 			} else {
 				fmt.Println("Usage: storedir [ip] [port] [path]")
-				fmt.Println()
 			}
 		case "help":
 			fmt.Println("COMMANDS:")
 			fmt.Println(" get [fileHash]                 Request a file from DHT")
-			fmt.Println(" store [fileHash] [amount]      Store a file on DHT")
+			fmt.Println(" store [fileName] [amount]      Store a file on DHT")
 			fmt.Println(" getdir [ip] [port] [path]      Request a directory")
 			fmt.Println(" storedir [ip] [port] [path]    Request storage of a directory")
 			fmt.Println(" import [filepath]              Import a file")
@@ -201,10 +290,8 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 			fmt.Println(" location                       Print your location")
 			fmt.Println(" network                        Test speed of network")
 			fmt.Println(" exit                           Exit the program")
-			fmt.Print()
 		default:
 			fmt.Println("Unknown command. Type 'help' for available commands.")
-			fmt.Println()
 		}
 	}
 }
@@ -231,4 +318,65 @@ func getPort(useCase string) string {
 
 		fmt.Print("Invalid port. Please enter a different port: ")
 	}
+}
+
+func getPassKey() string {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Enter your blockchain wallet passkey: ")
+	passKey, err := reader.ReadString('\n')
+	if err != nil {
+		fmt.Println("Error reading input:", err)
+		os.Exit(1)
+	}
+	passKey = strings.TrimSpace(passKey)
+	return passKey
+}
+
+// detectNAT simulates the process of detecting whether the node is behind NAT.
+func detectNAT() bool {
+	ipapiClient := http.Client{}
+
+	ipv4Req, err := http.NewRequest("GET", "http://httpbin.org/ip", nil)
+	if err != nil {
+		fmt.Println("Error creating IPv4 request:", err)
+		os.Exit(1)
+	}
+	resp, err := ipapiClient.Do(ipv4Req)
+	if err != nil {
+		fmt.Println("Error retrieving IPv4:", err)
+		os.Exit(1)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading IPv4 response body:", err)
+		os.Exit(1)
+	}
+
+	var ipv4JSON struct {
+		Origin string `json:"origin"`
+	}
+	err = json.Unmarshal(body, &ipv4JSON)
+	if err != nil {
+		fmt.Println("Error unmarshalling IPv4 response body:", err)
+		os.Exit(1)
+	}
+
+	publicIP := net.ParseIP(ipv4JSON.Origin)
+
+	// Define private IP address ranges.
+	privateRanges := []*net.IPNet{
+		{IP: net.IPv4(10, 0, 0, 0), Mask: net.CIDRMask(8, 32)},
+		{IP: net.IPv4(172, 16, 0, 0), Mask: net.CIDRMask(12, 32)},
+		{IP: net.IPv4(192, 168, 0, 0), Mask: net.CIDRMask(16, 32)},
+	}
+
+	// Check if the public IP address is within any of the private IP address ranges.
+	for _, pr := range privateRanges {
+		if pr.Contains(publicIP) {
+			return false
+		}
+	}
+	return true
 }
