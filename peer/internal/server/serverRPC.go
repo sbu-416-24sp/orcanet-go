@@ -12,6 +12,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"bytes"
 	"fmt"
 	"io"
 	"log"
@@ -19,14 +20,19 @@ import (
 	"net/http"
 	"orca-peer/internal/fileshare"
 	orcaHash "orca-peer/internal/hash"
+	orcaJobs "orca-peer/internal/jobs"
 	"os"
 	"strings"
 	"sync"
+	"encoding/json"
+	"encoding/binary"
 	"time"
 	"github.com/go-ping/ping"
 	dht "github.com/libp2p/go-libp2p-kad-dht"
 	record "github.com/libp2p/go-libp2p-record"
 	libp2pcrypto "github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/protocol"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
 	drouting "github.com/libp2p/go-libp2p/p2p/discovery/routing"
@@ -45,6 +51,8 @@ type FileShareServerNode struct {
 	PubKey            libp2pcrypto.PubKey
 	V                 record.Validator
 	StoredFileInfoMap map[string]fileshare.FileInfo //This is the list of files we are storing
+	Host host.Host
+	HostMultiAddr string
 }
 
 var (
@@ -53,7 +61,7 @@ var (
 	peerTableMUT sync.Mutex
 )
 
-func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode, host host.Host) {
+func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort string, serverReady chan bool, fileShareServer *FileShareServerNode, host host.Host, hostMultiAddr string) {
 	ctx := context.Background()
 
 	bootstrapPeers := ReadBootstrapPeers()
@@ -106,6 +114,8 @@ func CreateMarketServer(privKey libp2pcrypto.PrivKey, dhtPort string, rpcPort st
 	fileShareServer.PrivKey = privKey
 	fileShareServer.PubKey = pubKey
 	fileShareServer.V = validator
+	fileShareServer.Host = host
+	fileShareServer.HostMultiAddr = hostMultiAddr
 	fileshare.RegisterFileShareServer(s, fileShareServer)
 	go ListAllDHTPeers(ctx, host)
 	fmt.Printf("Market RPC Server listening at %v\n\n", lis.Addr())
@@ -356,7 +366,7 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 	fileReq := fileshare.RegisterFileRequest{}
 	fileReq.User = &fileshare.User{}
 	fileReq.User.Price = amountPerMB
-	fileReq.User.Ip = ip
+	fileReq.User.Ip = serverStruct.HostMultiAddr
 	fileReq.User.Port = port
 	fileReq.FileKey = fileKey
 	_, err = serverStruct.RegisterFile(ctx, &fileReq)
@@ -364,7 +374,83 @@ func SetupRegisterFile(filePath string, fileName string, amountPerMB int64, ip s
 		return err
 	}
 
+	serverStruct.Host.SetStreamHandler(protocol.ID("orcanet-fileshare/1.0/" + fileKey), HandleStoredFileStream)
 	return nil
+}
+
+func HandleStoredFileStream(s network.Stream) {
+	defer s.Close()
+	for {
+		buf := bufio.NewReader(s)
+		lengthBytes := make([]byte, 0)
+		for i := 0; i < 4; i++ {
+			b, err := buf.ReadByte()
+			if err != nil {
+				fmt.Println(err)
+				return
+			}	
+			lengthBytes = append(lengthBytes, b)
+		}
+
+		length := binary.LittleEndian.Uint32(lengthBytes)
+		payload := make([]byte, length)
+		_, err := io.ReadFull(buf, payload)
+
+		fileChunkReq := orcaJobs.FileChunkRequest{}
+		err = json.Unmarshal(payload, &fileChunkReq)
+		if err != nil {
+			fmt.Println("Error unmarshaling JSON:", err)
+			return 
+		}
+		
+		orcaFileInfo := serverStruct.StoredFileInfoMap[fileChunkReq.FileHash]
+		chunkHash := orcaFileInfo.GetChunkHashes()[fileChunkReq.ChunkIndex]
+
+		file, err := os.Open("./files/stored/" + chunkHash)
+		if err != nil {
+			fmt.Println("Error:", err)
+			return 
+		}
+		defer file.Close()
+
+		fileChunk := orcaJobs.FileChunk{
+			FileHash: fileChunkReq.FileHash,
+			ChunkIndex: fileChunkReq.ChunkIndex,
+			MaxChunk: len(orcaFileInfo.GetChunkHashes()),
+			JobId: fileChunkReq.JobId,
+		}
+	
+		var chunkData bytes.Buffer
+
+		_, err = io.Copy(&chunkData, file)
+		if err != nil {
+			fmt.Println("Error copying:", err)
+			return
+		}
+
+		chunkDataBytes := chunkData.Bytes()
+		fileChunk.Data = chunkDataBytes
+		
+		payloadBytes, err := json.Marshal(fileChunk)
+		if err != nil {
+			fmt.Printf("Error marshaling json %s\n", err)
+			return
+		}
+
+		respLengthHeader := make([]byte, 4)
+		binary.LittleEndian.PutUint32(respLengthHeader, uint32(len(payloadBytes)))
+		_, err = s.Write(respLengthHeader)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		_, err = s.Write(payloadBytes)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+	}
 }
 
 /*

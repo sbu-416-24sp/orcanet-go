@@ -97,7 +97,7 @@ func StartCLI(bootstrapAddress *string, pubKey *rsa.PublicKey, privKey *rsa.Priv
 	Client.PrivateKey = privKey
 	Client.PublicKey = pubKey
 	Client.Host = host
-	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, libp2pPrivKey, passKey, Client, startAPIRoutes, host)
+	go orcaServer.StartServer(httpPort, dhtPort, rpcPort, serverReady, &confirming, &confirmation, libp2pPrivKey, passKey, Client, startAPIRoutes, host, hostMultiAddr)
 	<-serverReady
 	orcaBlockchain.InitBlockchainStats(pubKey)
 	fmt.Println("Welcome to Orcanet!")
