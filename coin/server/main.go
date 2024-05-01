@@ -28,6 +28,7 @@ func main() {
     http.HandleFunc("/getPeerInfo", getPeerInfo)
     http.HandleFunc("/getBestBlock", getBestBlock)
     http.HandleFunc("/getBestBlockInfo", getBestBlockInfo)
+    http.HandleFunc("/stopMine", stopMine)
     fmt.Println("starting orcanet")
     startOrcaNet()    
     startOrcaWallet()

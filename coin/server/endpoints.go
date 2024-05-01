@@ -188,6 +188,18 @@ func sendCoins(numCoins, address string) error {
 // stopMine: endpoint to stop mining
 func stopMine(w http.ResponseWriter, r *http.Request) {
     fmt.Println("stop mine endpoint")
+    // kill the instance first 
+    if err := manageOrcaNet.Stop(); err != nil {
+        fmt.Println("failed to end Orcanet:", err)
+        http.Error(w, "failed to kill original OrcaNet isntance to start mining", http.StatusInternalServerError)
+        return 
+    }
+    if err := manageOrcaNet.Start(); err != nil {
+        fmt.Println("failed to start mining:", err)
+        http.Error(w, "failed to start mining", http.StatusInternalServerError)
+        return 
+    }
+    io.WriteString(w, "Mining successfully started")
 }
 
 
